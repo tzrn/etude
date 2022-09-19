@@ -1,0 +1,31 @@
+char action a
+real num1   0
+real num2   0
+
+print "First number : "
+scan num1
+print "Action [+-*/]: "
+scan action
+print "Second number: "
+scan num2
+
+doif $action = + goto 18
+doif $action = - goto 20
+doif $action = * goto 22
+doif $action = / goto 24
+goto 27
+
+sum num1 $num2
+goto 30
+sub num1 $num2
+goto 30
+prod num1 $num2
+goto 30
+div num1 $num2
+goto 30
+
+print "No such action!" ` `
+goto 5
+
+print "Result: " $num1 ` `
+goto 5

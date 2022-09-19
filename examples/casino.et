@@ -1,0 +1,114 @@
+real money 500
+int num1   0
+int num2   0
+int num3   0
+int guess  0
+int right  0
+real bet   0
+char re    n
+
+clear
+print "		      Welcome to casino!" `
+print "     Three random numbers from 1 to 5 will be generated" `
+print "      You will need to make a bet and guess a number" `
+print "If your number not any of those three casino takes your bet" `
+print "If your number is encountered once  you take back your bet + win 150%" `
+print "If your number is encountered twice you take back your bet + win 300%" `
+print "If your number is encountered trice you take back your bet + win 900%" `
+
+
+
+
+
+
+
+
+print "You have: " $money $ ` `
+print "Your bet: "
+scan bet
+
+doif $bet > $money goto 33
+goto 38
+
+print "Not enught money!" ` `
+goto 27
+
+
+
+doif $bet < 1 goto 41
+goto 45
+
+print "You shoud bet more than 0$!" ` `
+goto 27
+
+
+print "Your guess: "
+scan guess
+
+
+doif $guess > 5 goto 52
+goto 57
+
+print "Number cannot be more than 5!" ` `
+goto 45
+
+
+
+doif $guess < 1 goto 60
+goto 66
+
+print "Number cannot be less than 0!" ` `
+goto 45
+
+
+
+
+print `
+wait 2
+rand 1 5 num1
+print $num1 "   "
+wait 2
+rand 1 5 num2
+print $num2 "   "
+wait 2
+rand 1 5 num3
+print $num3 "   " ` `
+
+
+
+
+
+swap right 0
+doif $guess = $num1 sum right 1
+doif $guess = $num2 sum right 1
+doif $guess = $num3 sum right 1
+print "You got " $right " right!" `
+
+
+
+
+doif $right = 0 goto 99
+doif $right = 1 prod bet 1.5
+doif $right = 2 prod bet 3
+doif $right = 3 prod bet 9
+
+print "You win " $bet $! ` `
+goto 102
+
+
+print "You lose " $bet $! ` `
+prod bet -1.0
+
+sum money $bet
+
+
+
+print "Continue playing? [y/n]: "
+scan re
+doif $re = y goto 111
+doif $re = Y goto 111
+goto 114
+clear
+goto 26
+
+

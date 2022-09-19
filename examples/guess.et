@@ -1,0 +1,14 @@
+int a 0
+int b 0
+
+clear
+rand 1 10 b
+
+print "Guess the number from 1 to 10" ` "Your guess: "
+scan a
+doif $a = $b goto 12
+print "You lose! Right number was " $b ! `
+goto 13
+print "You win!" `
+wait 1
+goto 4

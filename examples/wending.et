@@ -1,0 +1,32 @@
+int money 30
+int choice 0
+
+
+clear
+print "You have: " $money $ ` `
+print "1) Cola 7$" ` "2) Fanta 10$" ` "3) Milk 12$" `
+print "Your choice: "
+
+scan choice
+
+
+doif $choice = 1 goto 19
+doif $choice = 2 goto 21
+doif $choice = 3 goto 23
+
+
+
+sum money -7
+goto 28
+sum money -10
+goto 28
+sum money -12
+
+
+
+
+doif $money < 0 goto 32
+goto 5
+
+
+print "No." `
