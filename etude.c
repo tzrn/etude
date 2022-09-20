@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2022 tzrn
+Copyright © 2022 tzrn
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -65,7 +65,6 @@ typedef struct{
 	int logSize;
 } vars;
 
-int strsame(char *, char *);
 int strtoi(char *);
 
 int type(char *); // guess type
@@ -92,7 +91,7 @@ void fsub (float *x, float *y){*x-=*y;}
 void fprod(float *x, float *y){*x*=*y;}
 void fdivi(float *x, float *y){*x/=*y;}
 void fswap(float *x, float *y){*x=*y;}
-//previous string is unfreed, floating //somewhere in the heep :(
+//previous string is unfreed, floating //somewhere in the heap :(
 void ssum (char **x, char **y){char *buff=strdup(strcat(*x,*y));*x=buff;}				   
 void sswap(char **x, char **y){*x=strdup(*y);} //same thing :(
 
@@ -126,9 +125,13 @@ int main(int argc, char **argv)
 	else {printf("No input file!\n");return 1;}
 	source=malloc(sizeof(char *)*SOURCE_MAX); //max strings in source file
 	source[0]=malloc(INP_MAX);
-	while(fgets(source[slen++],INP_MAX,file)!=NULL)source[slen]=malloc(INP_MAX); //this is dumb!
-	fclose(file);								       //I need to get rid of emty lines at
-										       //THIS STAGE!!!!!
+	while(fgets(source[slen++],INP_MAX,file)!=NULL)
+	{
+		//if(*source[slen-1]=='\n'){slen--;continue;}  Damn! this doesnt work 'cause goto will break!!!
+		source[slen]=malloc(INP_MAX); //this is dumb!
+	}
+	fclose(file);
+
 	srand(time(&ti));
 
 	init_vars(&varlist);
@@ -141,8 +144,6 @@ int main(int argc, char **argv)
 	//for(c=0;c<argc;c++) printf("%d) %s\n",c,argv[c]);
 
 	do {
-		//printf("->: "); //invitation
-
 		//for(c=0; (b1=getchar())!='\n'; input[c++] = b1);
 		for(c=0; (b1=source[finger][c])!='\n'; input[c++]=b1); // doin' in manual cause just copypaste of interactive
 		input[c]=0; // also replaces \n
@@ -161,7 +162,6 @@ int main(int argc, char **argv)
 		exec(comm,&arg,&varlist,source,&finger);
 	} while(finger++<slen-2); //quit
 	
-	//printf("Goodbye, roma.\n");
 	free(input);
 	return 0;
 }
@@ -170,10 +170,9 @@ void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
 {
 	int c,min,max,ivarb, newcomm,jepp;
 	float fvarb; // buffer for float var
-	char gch; // buffer for getchar
 	var *pi, *pi2; //initially was supposed to point to var type (point to int)
 	char *sbuf, *sbuf2; //for creating string and for doif if both are not variables (second one is also for anything else)
-	args argif,argo; // <-- Example of a bad code design - a variable in case i do doif and argo
+	args argif; // <-- Example of a bad code design - a variable in case i do doif
 
 	switch(comm) //is it even ok for a switch to be so long?
 	{
@@ -260,7 +259,7 @@ void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
 		case 1953720684: //list list all variables and info about them
 		for(pi = varlist->elems;pi<varlist->elems+varlist->logSize;pi++)
 		{
-			printf("#%x -> %s (%s) [",pi,pi->name,stype(pi->type));
+			printf("#%p -> %s (%s) [",pi,pi->name,stype(pi->type));
 			sbuf2=malloc(sizeof(void *));
 			get_str_value(pi->value,&sbuf2,pi->type);
 			printf("%s",sbuf2);
@@ -351,14 +350,6 @@ void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
 	}
 }
 
-int strsame(char *str1, char *str2)
-{
-	int i;
-	for(i=0;str1[i]!='\0' && str2[i] !='\0';i++)
-		if(str1[i]!=str2[i]) return 0;
-	return 1;
-}
-
 int strtoi(char *str)
 {
 	int i,istr=0;
@@ -445,17 +436,21 @@ int type(char *str) //guess type by string
 {
 	int i=0,dot=0,chars=0;
 	if(str[i]=='-')
+	{
 		if(str[i+1]==0)return 0; else i++; // - sign
+	}
 
 	for(;str[i]!='\0';i++)
 	{
 		if(str[i]<48 || str[i]>57)
+		{
 			if(str[i]==46) //.
 			{
 				if(dot++==2)break;
 			}
 			else
 				if(chars++==2)break;
+		}
 	}
 	if(!chars)
 		switch(dot)
@@ -466,8 +461,7 @@ int type(char *str) //guess type by string
 	else
 		if(chars==1)
 			return 0;
-		else
-			return -1;
+	return -1;
 }
 
 char *stype(int type)
@@ -479,6 +473,7 @@ char *stype(int type)
 		case INT: return "int";
 		case REAL: return "real";
 	}
+	return "unknown";
 }
 
 int check_args(args *arg, int min, ...) // 1 - same 0 - any
@@ -500,6 +495,7 @@ int check_args(args *arg, int min, ...) // 1 - same 0 - any
 	same=type(arg->argv[i++]);
 	for(;i<=arg->argc;i++)
 		if(va_arg(types,int)==1)
+		{
 			if(same!=type(arg->argv[i]))
 			{
 				printf("Wrong argument type!\n");
@@ -508,6 +504,7 @@ int check_args(args *arg, int min, ...) // 1 - same 0 - any
 			}
 			else
 				same=type(arg->argv[i]);
+		}
 
 	va_end(types);
 	return 1;
@@ -567,6 +564,7 @@ int compare(void *val1, void *val2, int type) // 0 - equel; <0 - less; >0 - more
 		case STR:return strcmp((char*)val1,(char*)val2);
 		case CHAR:return *((char*)val1)-*((char*)val2);
 	}
+	return 0;
 }
 
 int get_comm(char *input, int *c)
@@ -604,7 +602,7 @@ var *getvarue(char *value, vars *varlist) //if var (starts with $), returns it, 
 	if(value[0]=='$')
 		if((pi=get_var(varlist,value+1))!=0) return pi;
 
-	pi=malloc(sizeof(pi));
+	pi=malloc(sizeof(*pi));
 	pi->type=type(value);
 
 	switch(pi->type)
