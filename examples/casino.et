@@ -7,7 +7,7 @@ int right  0
 real bet   0
 char re    n
 
-clear
+
 print "		      Welcome to casino!" `
 print "     Three random numbers from 1 to 5 will be generated" `
 print "      You will need to make a bet and guess a number" `
@@ -89,8 +89,8 @@ print "You got " $right " right!" `
 
 doif $right = 0 goto 99
 doif $right = 1 prod bet 1.5
-doif $right = 2 prod bet 3
-doif $right = 3 prod bet 9
+doif $right = 2 prod bet 3.0
+doif $right = 3 prod bet 9.0
 
 print "You win " $bet $! ` `
 goto 102
@@ -108,7 +108,7 @@ scan re
 doif $re = y goto 111
 doif $re = Y goto 111
 goto 114
-clear
+
 goto 26
 
 

@@ -31,10 +31,12 @@ SOFTWARE.
 #define INP_MAX  100 //max chars in whole input including \0
 #define COMM_MAX 24  //max chars in command
 #define SOURCE_MAX 200
+#define ARG_MAX 8
 
 #ifdef _WIN32
 #define CLSC "cls"
 #include <Windows.h> //this is for wait (sleep) but it doesnt work on windows for some reason, whatever
+#define sleep(s) Sleep(s)
 #else
 #define CLSC "clear"
 #include <unistd.h>
@@ -71,6 +73,7 @@ int type(char *); // guess type
 char *stype(int); // conver number of type to name (1=>int)
 
 void init_vars(vars *s);
+void dispose_vars(vars *s);
 void add_var(vars *s, int elemSize, void *value, char *name, int type);
 
 void parseargs(args *arg);
@@ -101,7 +104,7 @@ void (*sop[2])(char **,char **) = {ssum,sswap};
 
 void operation(args *arg, vars *varlist, int op); //void (**op)()); <-- there was buch of cringe (gone now)
 void chvar(var *value1, var *value2, int op); //void (**change)(void *val1,void *val2));
-void exec(int comm, args *arg, vars *varlist, char **source, int *finger); // <--- whole action is here
+void exec(int comm, args *arg, vars *varlist,int *finger); // <--- whole action is here
 
 int compare(void *val1, void *val2, int type); // 0 - equel; <0 - less; >0 - more
 int get_comm(char *, int *); //return position where args start, int * changed to position of args
@@ -110,7 +113,6 @@ int main(int argc, char **argv)
 {
 	int c,comm,slen=0,finger=0;
 	char b1; //bx - buffer
-	time_t ti;
 	FILE *file;
 	char **source;
 	vars varlist; // now that i think, some of these could be global
@@ -120,7 +122,7 @@ int main(int argc, char **argv)
 	if(argc>1)
 	{
 		if((file=fopen(argv[1],"r"))==NULL)
-		{printf("File %s does not exist!\n",argv[1]);return 1;}
+		{printf("Could not open %s.\n",argv[1]);return 1;}
 	}
 	else {printf("No input file!\n");return 1;}
 	source=malloc(sizeof(char *)*SOURCE_MAX); //max strings in source file
@@ -132,12 +134,11 @@ int main(int argc, char **argv)
 	}
 	fclose(file);
 
-	srand(time(&ti));
+	srand(time(NULL));
 
 	init_vars(&varlist);
-	arg.all=malloc(60);
-	arg.argv=malloc(sizeof(char *)*8);
-	arg.poses=malloc(sizeof(int)*8);
+	arg.argv=malloc(sizeof(char *)*ARG_MAX);
+	arg.poses=malloc(sizeof(int)*ARG_MAX);
 
 	char *input=malloc(INP_MAX); //free at the end!
 
@@ -159,14 +160,20 @@ int main(int argc, char **argv)
 		}
 		else arg.argc=0;
 
-		exec(comm,&arg,&varlist,source,&finger);
+		exec(comm,&arg,&varlist,&finger);
 	} while(finger++<slen-2); //quit
 	
+	dispose_vars(&varlist);
 	free(input);
+	free(arg.poses);
+	for(c=0;c<arg.argc;c++)free(arg.argv[c]);
+	free(arg.argv);
+	for(c=0;c<slen;c++)free(source[c]);
+	free(source);
 	return 0;
 }
 
-void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
+void exec(int comm, args *arg, vars *varlist, int *finger)
 {
 	int c,min,max,ivarb, newcomm,jepp;
 	float fvarb; // buffer for float var
@@ -259,7 +266,7 @@ void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
 		case 1953720684: //list list all variables and info about them
 		for(pi = varlist->elems;pi<varlist->elems+varlist->logSize;pi++)
 		{
-			printf("#%p -> %s (%s) [",pi,pi->name,stype(pi->type));
+			printf("#%p -> %s (%s) [",pi->value,pi->name,stype(pi->type));
 			sbuf2=malloc(sizeof(void *));
 			get_str_value(pi->value,&sbuf2,pi->type);
 			printf("%s",sbuf2);
@@ -297,7 +304,8 @@ void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
 			argif.argv=malloc(sizeof(char *)*8);
 			argif.poses=malloc(sizeof(int)*8);
 			parseargs(&argif); //<-- freeeee
-			exec(newcomm,&argif,varlist,source,finger);
+			exec(newcomm,&argif,varlist,finger);
+			for(c=0;c<argif.argc;c++)free(argif.argv[c]);
 			free(argif.argv);
 			free(argif.poses);
 		}
@@ -342,6 +350,7 @@ void exec(int comm, args *arg, vars *varlist, char **source, int *finger)
 			case INT:*((int *)(pi->value))=atoi(sbuf2);break;
 			case REAL:*((float *)(pi->value))=atof(strdup(sbuf2));break;
 		}
+		free(sbuf2);
 		break;
 		
 		case 1953063287: //wait
@@ -410,6 +419,17 @@ void init_vars(vars *s)
 	//printf("initial varlist allocation -> allocating [%d] bytes\n",sizeof(var) * (s -> allocSize));
 	s -> elems = malloc(sizeof(var) * (s -> allocSize));
 	assert(s -> elems != NULL);
+}
+
+void dispose_vars(vars *s)
+{
+	int i;
+	for(i=0;i<s->logSize;i++)
+	{
+		free(s->elems[i].name);
+		free(s->elems[i].value);
+	}
+	free(s->elems);
 }
 
 void add_var(vars *s, int elemSize, void *value, char *name, int type)
