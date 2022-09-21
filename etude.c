@@ -31,7 +31,8 @@ SOFTWARE.
 #define INP_MAX  100 //max chars in whole input including \0
 #define COMM_MAX 24  //max chars in command
 #define SOURCE_MAX 200
-#define ARG_MAX 8
+#define ARG_MAX 8 //max amount of arguments
+#define ARG_MCH 80 //max amount of charecters in an argument
 
 #ifdef _WIN32
 #define CLSC "cls"
@@ -79,7 +80,7 @@ void add_var(vars *s, int elemSize, void *value, char *name, int type);
 void parseargs(args *arg);
 int check_args(args *, int min_count,...);
 var *get_var(vars *varlist,char *name); //search for var struct
-void get_str_value(void *addr,char **str, int type); //of a var
+void get_str_value(void *addr, char **str, int type); //of a var
 var *getvarue(char *value, vars *varlist);
 
 //void ioper(void *x,void *y,void *(*op)()){op( *((int *)x), *((int *)y));}
@@ -95,8 +96,8 @@ void fprod(float *x, float *y){*x*=*y;}
 void fdivi(float *x, float *y){*x/=*y;}
 void fswap(float *x, float *y){*x=*y;}
 //previous string is unfreed, floating //somewhere in the heap :(
-void ssum (char **x, char **y){char *buff=strdup(strcat(*x,*y));*x=buff;}				   
-void sswap(char **x, char **y){*x=strdup(*y);} //same thing :(
+void ssum (char **x, char **y){*x=realloc(*x,sizeof(char)*80);strcat(*x,*y);}
+void sswap(char **x, char **y){free(*x);*x=strdup(*y);} //same thing :(
 
 void (*iop[5])(int *,int *)     = {isum,iswap,isub,idivi,iprod}; //integer operations and so on
 void (*fop[5])(float *,float *) = {fsum,fswap,fsub,fdivi,fprod}; //so 0 sum 1 swap 2 sub 3 divi 4 prod
@@ -161,12 +162,12 @@ int main(int argc, char **argv)
 		else arg.argc=0;
 
 		exec(comm,&arg,&varlist,&finger);
+		for(c=0;c<arg.argc;c++)free(arg.argv[c]);
 	} while(finger++<slen-2); //quit
 	
 	dispose_vars(&varlist);
 	free(input);
 	free(arg.poses);
-	for(c=0;c<arg.argc;c++)free(arg.argv[c]);
 	free(arg.argv);
 	for(c=0;c<slen;c++)free(source[c]);
 	free(source);
@@ -202,7 +203,6 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 				pi=get_var(varlist,arg->argv[c]+1);
 				if(pi!=NULL)
 				{
-					sbuf2=malloc(sizeof(void *));
 					get_str_value(pi->value,&sbuf2,pi->type);
 					printf("%s",sbuf2);
 					free(sbuf2);
@@ -242,7 +242,6 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 
 		case 7500915: //str
 		if(!check_args(arg,2,0,0))break;
-		sbuf=malloc(sizeof(char *));
 		sbuf=strdup(arg->argv[1]);
 		add_var(varlist,sizeof(char *),&sbuf,arg->argv[0],-1); //vars size value name type
 		break;
@@ -266,11 +265,10 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 		case 1953720684: //list list all variables and info about them
 		for(pi = varlist->elems;pi<varlist->elems+varlist->logSize;pi++)
 		{
-			printf("#%p -> %s (%s) [",pi->value,pi->name,stype(pi->type));
-			sbuf2=malloc(sizeof(void *));
 			get_str_value(pi->value,&sbuf2,pi->type);
 			printf("%s",sbuf2);
 			printf("]\n");
+			free(sbuf2);
 		}
 		break;
 
@@ -309,8 +307,8 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 			free(argif.argv);
 			free(argif.poses);
 		}
-		if(pi->name==0) free(pi->value);
-		if(pi2->name==0) free(pi2->value);
+		if(pi->name==0) {free(pi->value);free(pi);}
+		if(pi2->name==0) {free(pi2->value);free(pi2);}
 		break;
 
 		case 1869901671://goto
@@ -320,6 +318,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 //					     // one of them, it aint nessesery so
 //		//ok, after testing, comes out i was wrong, i do need to do - 1 (-2 even)
 		//there was a bunch of code here that also executed the command (stupid!)
+		if(pi->name==0) {free(pi->value);free(pi);}
 		break;
 
 		case 1684955506://rand
@@ -348,7 +347,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 			case STR:*((char **)(pi->value))=strdup(sbuf2);break;
 			case CHAR:*((char *)(pi->value))=sbuf2[0];break;
 			case INT:*((int *)(pi->value))=atoi(sbuf2);break;
-			case REAL:*((float *)(pi->value))=atof(strdup(sbuf2));break;
+			case REAL:*((float *)(pi->value))=atof(sbuf2);break;
 		}
 		free(sbuf2);
 		break;
@@ -373,11 +372,12 @@ int strtoi(char *str)
 
 void parseargs(args *arg)
 {
-	int i=0,c=0,n=0;
+	int i=0,c=0;
 	char in=0; // in double quotes?
-	arg->argc=0;
 	char *buff=malloc(80); //buffpup lol
-	arg->poses[n]=i;
+
+	arg->argc=0;
+	arg->poses[arg->argc]=i;
 
 	while(arg->all[i]!=0)
 	{
@@ -387,15 +387,14 @@ void parseargs(args *arg)
 			if(in){buff[c++]=arg->all[i];break;}
 			buff[c]='\0';
 			c=0;
-			arg->argv[n++]=strdup(buff);
-			arg->argc++;
+			arg->argv[arg->argc++]=strdup(buff);
 			while(arg->all[i+1]==' ')i++;
-			arg->poses[n]=i+1;
+			arg->poses[arg->argc]=i+1;
 			//printf("arg no.%d starts at pos %d\n",n,arg->poses[n]);
 			break;
 
 			case '"':
-			in=(in)?0:1;
+			in=!in;
 			break;
 
 			default:
@@ -407,8 +406,7 @@ void parseargs(args *arg)
 	}
 	if(in)c--;
 	buff[c]='\0';
-	arg->argv[n]=strdup(buff);
-	arg->argc++;
+	arg->argv[arg->argc++]=strdup(buff);
 	free(buff);
 }
 
@@ -426,6 +424,7 @@ void dispose_vars(vars *s)
 	int i;
 	for(i=0;i<s->logSize;i++)
 	{
+		if(s->elems[i].type==STR)free(*((char **)s->elems[i].value));
 		free(s->elems[i].name);
 		free(s->elems[i].value);
 	}
@@ -540,12 +539,18 @@ var *get_var(vars *varlist,char *name) //search for var struct
 
 void get_str_value(void *addr,char **str, int type) //covert value of a var to string
 {
+	if(type==STR)
+	{
+		*str=strdup(*((char **)addr));
+		return;
+	}
+	
+	*str=malloc(sizeof(char)*ARG_MCH);
 	switch(type)
 	{
-		case STR: *str=*((char **)addr);break;
-		case CHAR: sprintf(*str,"%c",*((char *)(addr)));break;
-		case INT: sprintf(*str,"%d",*((int *)(addr)));break;
-		case REAL: sprintf(*str,"%.3f",*((float *)(addr)));break;
+		case CHAR:sprintf(*str,"%c",*((char *)(addr)));break;
+		case INT:sprintf(*str,"%d",*((int *)(addr)));break;
+		case REAL:sprintf(*str,"%.3f",*((float *)(addr)));break;
 	}
 }
 
@@ -562,6 +567,9 @@ void chvar(var *value1, var *value2,int op) //void (**change)(void *val1,void *v
 		break;
 
 		case STR: //str, sum etc.
+		printf("changing string\n");
+		printf("int chvar 1- %s\n",*((char**)value1->value));
+		printf("int chvar 2- %s\n",*((char**)value2->value));
 		(sop)[op](value1->value,value2->value);
 		return;
 
@@ -592,7 +600,7 @@ int get_comm(char *input, int *c)
 	int s=0, b=0, comm; //str counter and buff counter
 	char *buff=malloc(COMM_MAX);
 
-	if(*input==0)return 0;
+	if(*input==0){free(buff);return 0;}
 	while(input[s]==' ')s++; //skip spaces
 
 	while(input[s]!=' ' && input[s]!=0) //FOR FOR FOR?
@@ -618,7 +626,6 @@ var *getvarue(char *value, vars *varlist) //if var (starts with $), returns it, 
 {
 	var *pi;
 	void *buff;
-	void *str;
 	if(value[0]=='$')
 		if((pi=get_var(varlist,value+1))!=0) return pi;
 
@@ -630,7 +637,7 @@ var *getvarue(char *value, vars *varlist) //if var (starts with $), returns it, 
 		case INT:buff=malloc(sizeof(int));*((int*)buff) = atoi(value);break;
 		case REAL:buff=malloc(sizeof(float));*((float*)buff) = atof(value);break;
 		case CHAR:buff=malloc(sizeof(char));*((char*)buff) = value[0];break;
-		case STR:str=strdup(value);buff=&str;break;
+		case STR:buff=malloc(sizeof(char**));*((char**)buff)=strdup(value);break;
 		default: printf("error getting value\n");
 	}
 	pi->name=0;
@@ -646,5 +653,8 @@ void operation(args *arg, vars *varlist, int op) //void (**op)())
 	pi2=getvarue(arg->argv[1],varlist);
         if(pi==NULL){printf("operation: var not found!\n");return;}
         chvar(pi,pi2,op); //op);
-	if(pi2->name==0 && pi->type!=-1) free(pi2->value);
+	if(pi2->name==0){
+		if(pi2->type==STR)free(*((char **)pi2->value));
+		free(pi2->value);free(pi2);
+	}
 }
