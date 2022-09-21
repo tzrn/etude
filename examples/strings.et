@@ -1,6 +1,0 @@
-str abc "anime"
-str bed "games"
-
-sum abc $bed
-
-print $abc
