@@ -42,7 +42,15 @@ Only 4 first charecter of a command matter (prin and printf is the same command)
 + Command **doif** takes a condition and a command. It executes command only if the statement true.
 + Use $ to compare variables
 + Comparation types - =,<,> (e.g. `doif $a > 10 print big`)
-+ Command **goto** goes to the string in the source and continiues execution from there
++ use exclamaition point with a word (up to 16 bytes) to create a **label**
++ Command **goto** goes to **label** and continues execution from there
+```
+int a 1
+!loop
+print $a `
+sum a 1
+doif $a < 11 goto loop
+```
 
 **Some more commands**
 + **clear** to clear the terminal emulation screen
