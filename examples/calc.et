@@ -2,6 +2,7 @@ char action a
 real num1   0
 real num2   0
 
+!start
 print "First number : "
 scan num1
 print "Action [+-*/]: "
@@ -9,23 +10,28 @@ scan action
 print "Second number: "
 scan num2
 
-doif $action = + goto 18
-doif $action = - goto 20
-doif $action = * goto 22
-doif $action = / goto 24
-goto 27
+doif $action = + goto sum
+doif $action = - goto sub
+doif $action = * goto prod
+doif $action = / goto div
+goto err
 
+!sum
 sum num1 $num2
-goto 30
+goto res
+!sub
 sub num1 $num2
-goto 30
+goto res
+!prod
 prod num1 $num2
-goto 30
+goto res
+!div
 div num1 $num2
-goto 30
+goto res
 
+!err
 print "No such action!" ` `
-goto 5
 
+!res
 print "Result: " $num1 ` `
-goto 5
+goto start

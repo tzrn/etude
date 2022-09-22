@@ -2,24 +2,30 @@ int a 0
 int b 0
 int c 1
 
+!start
 clear
 print "Guess the number from 1 to 1000!" ` "1) Your guess: "
 rand 1 1000 b
+
+!input
 scan a
 
-doif $a > $b goto 18
-doif $a < $b goto 21
+doif $a > $b goto need_less
+doif $a < $b goto need_more
 
-print "You win!" ` "Press any key to restart"
+print "You win!" ` "Press Enter to restart"
 swap c 1
 scan
-goto 5
+goto start
 
+!need_less
 print "Less! " `
-goto 23
+goto retry
 
+!need_more
 print "More! " `
 
+!retry
 sum c 1
 print $c ") Try again: "
-goto 8
+goto input

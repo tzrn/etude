@@ -33,6 +33,8 @@ SOFTWARE.
 #define SOURCE_MAX 200
 #define ARG_MAX 8 //max amount of arguments
 #define ARG_MCH 80 //max amount of charecters in an argument
+#define COMLEN 4
+#define LABLEN 16 //label length
 
 #ifdef _WIN32
 #define CLSC "cls"
@@ -43,10 +45,12 @@ SOFTWARE.
 #include <unistd.h>
 #endif
 
-#define STR -1
-#define CHAR 0
-#define INT 1
-#define REAL 2
+typedef enum{
+	STR=-1,
+	CHAR,
+	INT,
+	REAL
+} type_e;
 
 typedef struct{
 	int argc;
@@ -59,7 +63,7 @@ typedef struct{
 	char *name;
 	void *value;
 	int varSize; // never used but would be wasted any way 'cause of padding
-	int type; // 1 - Int; 2 - Real; 0 - Char; -1 - String; (can be interpreted as any);
+	type_e type; // 1 - Int; 2 - Real; 0 - Char; -1 - String; (can be interpreted as any);
 } var;
 
 typedef struct{
@@ -68,7 +72,12 @@ typedef struct{
 	int logSize;
 } vars;
 
-int strtoi(char *);
+typedef struct{ //label for goto to go to
+	long int name;
+	unsigned int linenum;
+} label;
+
+long int strtoi(char *, int len);
 
 int type(char *); // guess type
 char *stype(int); // conver number of type to name (1=>int)
@@ -105,7 +114,9 @@ void (*sop[2])(char **,char **) = {ssum,sswap};
 
 void operation(args *arg, vars *varlist, int op); //void (**op)()); <-- there was buch of cringe (gone now)
 void chvar(var *value1, var *value2, int op); //void (**change)(void *val1,void *val2));
-void exec(int comm, args *arg, vars *varlist,int *finger); // <--- whole action is here
+void exec(int comm, args *arg, vars *varlist,int *finger,label *labels,int leblen); 
+//   ^
+//   |--- whole action is here
 
 int compare(void *val1, void *val2, int type); // 0 - equel; <0 - less; >0 - more
 int get_comm(char *, int *); //return position where args start, int * changed to position of args
@@ -116,24 +127,47 @@ int main(int argc, char **argv)
 	char b1; //bx - buffer
 	FILE *file;
 	char **source;
+	label labels[40]; //max labels (put in define?)
+	int leblen=0; //number of labels
 	vars varlist; // now that i think, some of these could be global
 	args arg;     // especially arg and varlist
 	
 	setbuf(stdout, NULL); //without this, buffer flushes only with \n (bad for wait command)
+
 	if(argc>1)
 	{
 		if((file=fopen(argv[1],"r"))==NULL)
 		{printf("Could not open %s.\n",argv[1]);return 1;}
 	}
 	else {printf("No input file!\n");return 1;}
+
 	source=malloc(sizeof(char *)*SOURCE_MAX); //max strings in source file
 	source[0]=malloc(INP_MAX);
-	while(fgets(source[slen++],INP_MAX,file)!=NULL)
+
+	while(fgets(source[slen],INP_MAX,file)!=NULL)
 	{
-		//if(*source[slen-1]=='\n'){slen--;continue;}  Damn! this doesnt work 'cause goto will break!!!
-		source[slen]=malloc(INP_MAX); //this is dumb!
+		switch(*source[slen])
+		{
+			case '\n': //empty strings
+			break;
+
+			case '@': //comments
+			break;
+	
+			case '!': //labels
+			labels[leblen].linenum=slen;
+			labels[leblen++].name=strtoi(source[slen]+1,LABLEN);		
+			//printf("%d  %s - #%d\n",leblen,source[slen],slen);
+			break;
+
+			default:
+			//printf("%d %s",slen,source[slen]);
+			source[++slen]=malloc(INP_MAX); //this is dumb!
+			break;
+		}
 	}
 	fclose(file);
+	if(slen==0){return 0;}
 
 	srand(time(NULL));
 
@@ -147,12 +181,14 @@ int main(int argc, char **argv)
 
 	do {
 		//for(c=0; (b1=getchar())!='\n'; input[c++] = b1);
+		//printf("finger is on %d %s",finger, source[finger]);
 		for(c=0; (b1=source[finger][c])!='\n'; input[c++]=b1); // doin' in manual cause just copypaste of interactive
 		input[c]=0; // also replaces \n
+		//printf("input - %s\n",input);
 		//printf("slen - %d\n",slen);
 
 		comm=get_comm(input,&c);
-		if(comm==0) continue;
+		//if(comm==0) continue;
 
 		if(c!=-1)
 		{
@@ -160,10 +196,10 @@ int main(int argc, char **argv)
 			parseargs(&arg); //if some chars after command
 		}
 		else arg.argc=0;
-
-		exec(comm,&arg,&varlist,&finger);
+		//printf("executing %d @ %s\n",comm,arg.all);
+		exec(comm,&arg,&varlist,&finger,labels,leblen);
 		for(c=0;c<arg.argc;c++)free(arg.argv[c]);
-	} while(finger++<slen-2); //quit
+	} while(++finger<slen); //quit
 	
 	dispose_vars(&varlist);
 	free(input);
@@ -174,9 +210,10 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-void exec(int comm, args *arg, vars *varlist, int *finger)
+void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int leblen)
 {
-	int c,min,max,ivarb, newcomm,jepp;
+	int c,i,min,max,ivarb, newcomm,jepp;
+	long int lgo; //to compare with label name
 	float fvarb; // buffer for float var
 	var *pi, *pi2; //initially was supposed to point to var type (point to int)
 	char *sbuf, *sbuf2; //for creating string and for doif if both are not variables (second one is also for anything else)
@@ -302,7 +339,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 			argif.argv=malloc(sizeof(char *)*8);
 			argif.poses=malloc(sizeof(int)*8);
 			parseargs(&argif); //<-- freeeee
-			exec(newcomm,&argif,varlist,finger);
+			exec(newcomm,&argif,varlist,finger,labels,leblen);
 			for(c=0;c<argif.argc;c++)free(argif.argv[c]);
 			free(argif.argv);
 			free(argif.poses);
@@ -313,12 +350,20 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 
 		case 1869901671://goto
 		if(!check_args(arg,1,0))break;
-		pi=getvarue(arg->argv[0],varlist);
-		*finger=*((int *)pi->value)-2; //it sould be - 1 couse of numeration from 0, but since i execute
-//					     // one of them, it aint nessesery so
-//		//ok, after testing, comes out i was wrong, i do need to do - 1 (-2 even)
-		//there was a bunch of code here that also executed the command (stupid!)
-		if(pi->name==0) {free(pi->value);free(pi);}
+		lgo=strtoi(arg->argv[0],LABLEN);
+		for(i=0;i<leblen;i++)
+		{
+			if(lgo==labels[i].name)
+			{
+			//printf("%li = %li\n",lgo,labels[i].name);
+			//printf("found %s, jumping to %d\n",arg->argv[0],*finger+3);
+			*finger=labels[i].linenum-1;
+			goto fi;
+			}
+			//printf("%li != %li\n",lgo,labels[i].name);
+		}
+		printf("%d label \"%s\" not found!\n",*finger,arg->argv[0]);
+		fi:
 		break;
 
 		case 1684955506://rand
@@ -329,7 +374,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 		if(arg->argc==2){printf("%d\n",c);break;}
 		pi=get_var(varlist,arg->argv[2]);
 		if(pi==NULL){printf("rand: var not found!\n");break;}
-		if(pi->type==2)
+		if(pi->type==REAL)
 			*((float *)pi->value)=(float)c;
 		else
 			*((int *)pi->value)=c;
@@ -353,17 +398,18 @@ void exec(int comm, args *arg, vars *varlist, int *finger)
 		break;
 		
 		case 1953063287: //wait
-		sleep(atoi(arg->argv[0])); //usleep take microseconds
+		sleep(atoi(arg->argv[0]));
 		break;
 	}
 }
 
-int strtoi(char *str)
+long int strtoi(char *str, int len) //len - how many of chars to write, others are ignored
 {
-	int i,istr=0;
-	for(i=0;i<4;i++)
+	long int i,istr=0;
+	//printf("len - %d\n",len);
+	for(i=0;i<len;i++)
 	{
-	if(str[i]==' ')break;
+	if(str[i]==' ' || str[i] == '\n' || str[i]==0)break;
 	*(((char *)&istr)+i)=str[i];
 	}
 
@@ -567,9 +613,8 @@ void chvar(var *value1, var *value2,int op) //void (**change)(void *val1,void *v
 		break;
 
 		case STR: //str, sum etc.
-		printf("changing string\n");
-		printf("int chvar 1- %s\n",*((char**)value1->value));
-		printf("int chvar 2- %s\n",*((char**)value2->value));
+		//printf("int chvar 1- %s\n",*((char**)value1->value));
+		//printf("int chvar 2- %s\n",*((char**)value2->value));
 		(sop)[op](value1->value,value2->value);
 		return;
 
@@ -610,7 +655,9 @@ int get_comm(char *input, int *c)
 	}
 
 	buff[b]=0;
-	comm = strtoi(buff);
+	//printf("COMMAND BUFF - %s\n",buff);
+	comm = strtoi(buff,COMLEN);
+	//printf("COMMAND CODE -%d\n",comm);
 	free(buff);
 
 	while(input[s]==' ')s++;
