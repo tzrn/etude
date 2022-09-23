@@ -222,7 +222,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 	switch(comm) //is it even ok for a switch to be so long?
 	{
 		default:
-		printf("Unknown command: [%d]\n", comm);
+		printf("%d: Unknown command: [%d]\n",*finger,comm);
 		break;
 
 		case 1953068401:break;//quit

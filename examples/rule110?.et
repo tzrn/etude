@@ -1,0 +1,112 @@
+int curr 0
+int s 0
+
+int cel0 0
+int cel1 0
+int cel2 0
+int cel3 0
+int cel4 0
+int cel5 0
+int cel6 0
+int cel7 0
+
+rand 0 1 cel0
+rand 0 1 cel1
+rand 0 1 cel2
+rand 0 1 cel3
+rand 0 1 cel4
+rand 0 1 cel5
+rand 0 1 cel6
+rand 0 1 cel7
+
+!start
+swap s 0
+
+doif $curr = 1 goto 1
+doif $curr = 2 goto 2
+doif $curr = 3 goto 3
+doif $curr = 4 goto 4
+doif $curr = 5 goto 5
+doif $curr = 6 goto 6
+doif $curr = 7 goto 7
+doif $curr = 0 goto 0
+
+!1
+sum s $cel0
+doif  $cel1 = 1 sum s 2
+doif  $cel2 = 1 sum s 4
+goto new
+!2
+sum s $cel1
+doif  $cel2 = 1 sum s 2
+doif  $cel3 = 1 sum s 4
+goto new
+!3
+sum s $cel2
+doif  $cel3 = 1 sum s 2
+doif  $cel4 = 1 sum s 4
+goto new
+!4
+sum s $cel3
+doif  $cel4 = 1 sum s 2
+doif  $cel5 = 1 sum s 4
+goto new
+!5
+sum s $cel4
+doif  $cel5 = 1 sum s 2
+doif  $cel6 = 1 sum s 4
+goto new
+!6
+sum s $cel5
+doif  $cel6 = 1 sum s 2
+doif  $cel7 = 1 sum s 4
+goto new
+!7
+sum s $cel6
+doif  $cel7 = 1 sum s 2
+doif  $cel0 = 1 sum s 4
+goto new
+!0
+sum s $cel7
+doif  $cel0 = 1 sum s 2
+doif  $cel1 = 1 sum s 4
+
+!new
+doif $s = 0 swap s 0
+doif $s = 1 swap s 1
+doif $s = 2 swap s 1
+doif $s = 3 swap s 1
+doif $s = 4 swap s 0
+doif $s = 5 swap s 1
+doif $s = 6 swap s 1
+doif $s = 7 swap s 0
+
+doif $curr = 0 swap cel0 $s
+doif $curr = 1 swap cel1 $s
+doif $curr = 2 swap cel2 $s
+doif $curr = 3 swap cel3 $s
+doif $curr = 4 swap cel4 $s
+doif $curr = 5 swap cel5 $s
+doif $curr = 6 swap cel6 $s
+doif $curr = 7 swap cel7 $s
+
+doif $cel0 = 0 print " "
+doif $cel1 = 0 print " "
+doif $cel2 = 0 print " "
+doif $cel3 = 0 print " "
+doif $cel4 = 0 print " "
+doif $cel5 = 0 print " "
+doif $cel6 = 0 print " "
+doif $cel7 = 0 print " "
+doif $cel0 = 1 print "@"
+doif $cel1 = 1 print "@"
+doif $cel2 = 1 print "@"
+doif $cel3 = 1 print "@"
+doif $cel4 = 1 print "@"
+doif $cel5 = 1 print "@"
+doif $cel6 = 1 print "@"
+doif $cel7 = 1 print "@"
+
+sum curr 1
+doif $curr > 7 swap curr 0
+goto start
