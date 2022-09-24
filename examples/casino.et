@@ -7,7 +7,7 @@ int right  0
 real bet   0
 char re    n
 
-
+clear
 print "		      Welcome to casino!" `
 print "     Three random numbers from 1 to 5 will be generated" `
 print "      You will need to make a bet and guess a number" `

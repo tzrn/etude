@@ -77,9 +77,32 @@ typedef struct{ //label for goto to go to
 	unsigned int linenum;
 } label;
 
+typedef struct{
+	int startline;
+	int retline; //line to return to after subroutine
+	long int name;
+	vars *locvars;
+	char **argnames;
+	int argnum;
+	var *retvar; //var to return value to
+} subroutine;
+
+typedef struct{
+	int logSize;
+	int allocSize;
+	subroutine **subs;
+} substack; //stack for subroutines
+
+void initsubs(substack *sstack);
+void disposesubs(substack *sstack);
+void pushsub(substack *stack, subroutine *sub); //char *args
+subroutine *popsub(substack *stack);
+
 long int strtoi(char *, int len);
 
 int type(char *); // guess type
+int typesize(int type);
+
 char *stype(int); // conver number of type to name (1=>int)
 
 void init_vars(vars *s);
@@ -92,11 +115,10 @@ var *get_var(vars *varlist,char *name); //search for var struct
 void get_str_value(void *addr, char **str, int type); //of a var
 var *getvarue(char *value, vars *varlist);
 
-//void ioper(void *x,void *y,void *(*op)()){op( *((int *)x), *((int *)y));}
-
 void isum (int *x, int *y){*x+=*y;}
 void isub (int *x, int *y){*x-=*y;}
 void idivi(int *x, int *y){*x/=*y;}
+void imod (int *x, int *y){*x%=*y;}
 void iprod(int *x, int *y){*x*=*y;}
 void iswap(int *x, int *y){*x=*y;}
 void fsum (float *x, float *y){*x+=*y;}
@@ -104,17 +126,17 @@ void fsub (float *x, float *y){*x-=*y;}
 void fprod(float *x, float *y){*x*=*y;}
 void fdivi(float *x, float *y){*x/=*y;}
 void fswap(float *x, float *y){*x=*y;}
-//previous string is unfreed, floating //somewhere in the heap :(
 void ssum (char **x, char **y){*x=realloc(*x,sizeof(char)*80);strcat(*x,*y);}
 void sswap(char **x, char **y){free(*x);*x=strdup(*y);} //same thing :(
 
-void (*iop[5])(int *,int *)     = {isum,iswap,isub,idivi,iprod}; //integer operations and so on
+void (*iop[6])(int *,int *)     = {isum,iswap,isub,idivi,iprod,imod}; //integer operations and so on
 void (*fop[5])(float *,float *) = {fsum,fswap,fsub,fdivi,fprod}; //so 0 sum 1 swap 2 sub 3 divi 4 prod
 void (*sop[2])(char **,char **) = {ssum,sswap};
 
 void operation(args *arg, vars *varlist, int op); //void (**op)()); <-- there was buch of cringe (gone now)
 void chvar(var *value1, var *value2, int op); //void (**change)(void *val1,void *val2));
-void exec(int comm, args *arg, vars *varlist,int *finger,label *labels,int leblen); 
+void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist,int *finger, label *labels,\
+		int leblen, substack *sstack, subroutine *subs, int sublen);
 //   ^
 //   |--- whole action is here
 
@@ -123,14 +145,27 @@ int get_comm(char *, int *); //return position where args start, int * changed t
 
 int main(int argc, char **argv)
 {
-	int c,comm,slen=0,finger=0;
+	int c,i,comm,slen=0,finger=0;
 	char b1; //bx - buffer
 	FILE *file;
 	char **source;
+
 	label labels[40]; //max labels (put in define?)
+	subroutine subs[40];//reapiting code TT ;;
+
+	//realloc and dispose needed will do later
+	for(c=0;c<40;c++)subs[c].argnames=malloc(sizeof(char *) * 8);
+	substack sstack; 
+
 	int leblen=0; //number of labels
-	vars varlist; // now that i think, some of these could be global
+	int sublen=0; //number of subroutines
+
+	initsubs(&sstack);
+	//global
+	vars gvarlist; // now that i think, some of these could be global
+	vars *currvarlist = &gvarlist;
 	args arg;     // especially arg and varlist
+	args subargbuff;
 	
 	setbuf(stdout, NULL); //without this, buffer flushes only with \n (bad for wait command)
 
@@ -143,6 +178,9 @@ int main(int argc, char **argv)
 
 	source=malloc(sizeof(char *)*SOURCE_MAX); //max strings in source file
 	source[0]=malloc(INP_MAX);
+
+	subargbuff.argv=malloc(sizeof(char *)*ARG_MAX);
+	subargbuff.poses=malloc(sizeof(int)*ARG_MAX);
 
 	while(fgets(source[slen],INP_MAX,file)!=NULL)
 	{
@@ -159,6 +197,23 @@ int main(int argc, char **argv)
 			labels[leblen++].name=strtoi(source[slen]+1,LABLEN);		
 			//printf("%d  %s - #%d\n",leblen,source[slen],slen);
 			break;
+	
+			case '%': //subroutines
+			subargbuff.all=source[slen]+1;
+			subs[sublen].startline=slen;
+			subs[sublen].argnum=0;
+
+			parseargs(&subargbuff);
+			for(c=1;c<subargbuff.argc;c++)
+			{
+				//printf("adding arg \"%s\"\n",subargbuff.argv[c]);
+				subs[sublen].argnames[c-1]=strdup(subargbuff.argv[c]);
+				free(subargbuff.argv[c]);
+				subs[sublen].argnum++;
+			}
+
+			subs[sublen++].name=strtoi(subargbuff.argv[0],LABLEN);
+			break;
 
 			default:
 			//printf("%d %s",slen,source[slen]);
@@ -171,10 +226,9 @@ int main(int argc, char **argv)
 
 	srand(time(NULL));
 
-	init_vars(&varlist);
+	init_vars(&gvarlist);
 	arg.argv=malloc(sizeof(char *)*ARG_MAX);
 	arg.poses=malloc(sizeof(int)*ARG_MAX);
-
 	char *input=malloc(INP_MAX); //free at the end!
 
 	//for(c=0;c<argc;c++) printf("%d) %s\n",c,argv[c]);
@@ -197,20 +251,33 @@ int main(int argc, char **argv)
 		}
 		else arg.argc=0;
 		//printf("executing %d @ %s\n",comm,arg.all);
-		exec(comm,&arg,&varlist,&finger,labels,leblen);
+		exec(comm,&arg,&gvarlist,&currvarlist,&finger,labels,leblen,&sstack,subs,sublen);
 		for(c=0;c<arg.argc;c++)free(arg.argv[c]);
-	} while(++finger<slen); //quit
+	} while(++finger<slen && finger>0);
 	
-	dispose_vars(&varlist);
+	for(c=0;c<40;c++)
+	{
+		for(i=0;c<sublen&&i<subs[c].argnum;i++)
+			free(subs[c].argnames[i]);
+		free(subs[c].argnames);
+	}
+
+	dispose_vars(&gvarlist); //if global needed
+	disposesubs(&sstack);
 	free(input);
+	//FUNCTION FINCTION FUNTION DISPOSE(ARGV/SUBARGBUFF)
+	if(sublen>0)free(subargbuff.argv[0]);
+	free(subargbuff.argv);
+	free(subargbuff.poses);
 	free(arg.poses);
 	free(arg.argv);
-	for(c=0;c<slen;c++)free(source[c]);
+	for(c=0;c<slen+1;c++)free(source[c]);
 	free(source);
 	return 0;
 }
 
-void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int leblen)
+void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, label *labels,\
+	       	int leblen, substack *sstack, subroutine *subs, int sublen)
 {
 	int c,i,min,max,ivarb, newcomm,jepp;
 	long int lgo; //to compare with label name
@@ -218,14 +285,13 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 	var *pi, *pi2; //initially was supposed to point to var type (point to int)
 	char *sbuf, *sbuf2; //for creating string and for doif if both are not variables (second one is also for anything else)
 	args argif; // <-- Example of a bad code design - a variable in case i do doif
+	subroutine *wayback;//帰り
 
 	switch(comm) //is it even ok for a switch to be so long?
 	{
 		default:
 		printf("%d: Unknown command: [%d]\n",*finger,comm);
 		break;
-
-		case 1953068401:break;//quit
 
 		case 1667594341: //exec
 		system(arg->all);
@@ -237,7 +303,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 			switch(arg->argv[c][0])
 			{
 				case '$':
-				pi=get_var(varlist,arg->argv[c]+1);
+				pi=get_var(*currvarlist,arg->argv[c]+1);
 				if(pi!=NULL)
 				{
 					get_str_value(pi->value,&sbuf2,pi->type);
@@ -263,45 +329,49 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 		case 7630441: //int
 		if(!check_args(arg,2,0,0))break;
 		ivarb = atoi(arg->argv[1]);
-		add_var(varlist,sizeof(int),&ivarb,arg->argv[0],1); //vars size value name type
+		add_var(*currvarlist,sizeof(int),&ivarb,arg->argv[0],1); //vars size value name type
 		break;
 
 		case 1818322290: //real
 		if(!check_args(arg,2,0,0))break;
 		fvarb = atof(arg->argv[1]);
-		add_var(varlist,sizeof(float),&fvarb,arg->argv[0],2); //vars size value name type
+		add_var(*currvarlist,sizeof(float),&fvarb,arg->argv[0],2); //vars size value name type
 		break;
 
 		case 1918986339: //char
 		if(!check_args(arg,2,0,0))break;
-		add_var(varlist,sizeof(char),arg->argv[1],arg->argv[0],0);
+		add_var(*currvarlist,sizeof(char),arg->argv[1],arg->argv[0],0);
 		break;
 
 		case 7500915: //str
 		if(!check_args(arg,2,0,0))break;
 		sbuf=strdup(arg->argv[1]);
-		add_var(varlist,sizeof(char *),&sbuf,arg->argv[0],-1); //vars size value name type
+		add_var(*currvarlist,sizeof(char *),&sbuf,arg->argv[0],-1); //vars size value name type
 		break;
 
 		case 1885435763: //swap //so 0 sum 1 swap 2 sub 3 divi 4 prod
-		operation(arg,varlist,1);
+		operation(arg,*currvarlist,1);
 		break;
 		case 7173491://sum  for the time you can only add real to real and int to int
-		operation(arg,varlist,0);
+		operation(arg,*currvarlist,0);
 		break;
 		case 6452595://sub
-		operation(arg,varlist,2);
+		operation(arg,*currvarlist,2);
 		break;
 		case 7760228://div
-		operation(arg,varlist,3);
+		operation(arg,*currvarlist,3);
 		break;
 		case 1685025392: //prod(uct)
-		operation(arg,varlist,4);
+		operation(arg,*currvarlist,4);
+                break;
+		case 6582125: //mod
+		operation(arg,*currvarlist,5);
                 break;
 
-		case 1953720684: //list list all variables and info about them
-		for(pi = varlist->elems;pi<varlist->elems+varlist->logSize;pi++)
+		case 1953720684: //list list all variables in current scope and info about them
+		for(pi = (*currvarlist)->elems;pi<(*currvarlist)->elems+(*currvarlist)->logSize;pi++)
 		{
+			printf("#%p \"%s\" [",pi->value,pi->name);
 			get_str_value(pi->value,&sbuf2,pi->type);
 			printf("%s",sbuf2);
 			printf("]\n");
@@ -315,8 +385,8 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 
 		case 1718185828://doif
 		//doif a[0] =[1] b[2] command blah blah[3]
-		pi=getvarue(arg->argv[0],varlist); //dont forget to free var
-		pi2=getvarue(arg->argv[2],varlist);
+		pi=getvarue(arg->argv[0],*currvarlist); //dont forget to free var
+		pi2=getvarue(arg->argv[2],*currvarlist);
 		//printf("%c %c %c\n",*((char *)pi->value),*arg->argv[1],*((char *)pi2->value));
 
 		jepp = 0;
@@ -339,7 +409,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 			argif.argv=malloc(sizeof(char *)*8);
 			argif.poses=malloc(sizeof(int)*8);
 			parseargs(&argif); //<-- freeeee
-			exec(newcomm,&argif,varlist,finger,labels,leblen);
+			exec(newcomm,&argif,gvarlist,currvarlist,finger,labels,leblen,sstack,subs,sublen);
 			for(c=0;c<argif.argc;c++)free(argif.argv[c]);
 			free(argif.argv);
 			free(argif.poses);
@@ -366,13 +436,89 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 		fi:
 		break;
 
+		case 1970499431://gosu(b)
+		if(!check_args(arg,1,0))break;
+		lgo=strtoi(arg->argv[0],LABLEN);
+		for(i=0;i<sublen;i++)
+		{
+			if(lgo==subs[i].name)
+			{
+			//void add_var(vars *s, int elemSize, void *value, char *name, int type)
+			pushsub(sstack,subs+i);
+			subs[i].retline=*finger;
+			*finger=subs[i].startline-1;
+
+			for(c=1; c<arg->argc && arg->argv[c][0]!='>'; c++) //convert arguments to local variables
+			{
+				pi=getvarue(arg->argv[c],NULL);
+				add_var(subs[i].locvars,typesize(pi->type),
+					pi->value,subs[i].argnames[c-1],pi->type);
+				free(pi->value); //this is dumb 'cause i could just giveaway
+				//pointer to new var, but instead i copying and freeing this one
+				free(pi);
+			}
+			
+			if(c<arg->argc) //if '>' exists
+				subs[i].retvar=get_var(*currvarlist,arg->argv[c+1]);
+			else
+				subs[i].retvar=NULL;
+
+			*currvarlist=subs[i].locvars;
+			goto sfi;
+			}
+		}
+
+		printf("%d subroutine \"%s\" not found!\n",*finger,arg->argv[0]);
+		sfi:
+		break;
+
+		case 7628146://ret(urn)
+		if(arg->argc>0) //return value to the var
+		{
+			pi=getvarue(arg->argv[0],*currvarlist);
+
+			if(sstack->subs[sstack->logSize-1]->retvar!=NULL)
+			memcpy(sstack->subs[sstack->logSize-1]->retvar->value,\
+					pi->value,typesize(pi->type));
+			else
+				printf("Trying to return value altough it doesn't go anwhere");
+		}
+		wayback=popsub(sstack);	
+		
+		if(sstack->logSize==0)
+			*currvarlist=gvarlist;
+		else
+			*currvarlist=sstack->subs[sstack->logSize-1]->locvars;
+
+		*finger=wayback->retline;
+		break;
+
+		//glob command to go back to global varlist to be able to goto from gosub to main
+		//or to use global vars in sub
+		case 1651469415://glob
+		*currvarlist=gvarlist;	
+		break;
+
+		case 6516588://loc go back to local
+		if(sstack->logSize==0)
+		{
+			fprintf(stderr,"loc: attempt to go back to local when not in function\n");
+			break;
+		}
+		*currvarlist=sstack->subs[sstack->logSize-1]->locvars;
+		break;
+
+		case 6581861://end
+		*finger=-1;
+		break;
+
 		case 1684955506://rand
 		if(!check_args(arg,2,1,1))break;
 		min=atoi(arg->argv[0]);
 		max=atoi(arg->argv[1]);
 		c=rand()%(max-min+1)+min;
 		if(arg->argc==2){printf("%d\n",c);break;}
-		pi=get_var(varlist,arg->argv[2]);
+		pi=get_var(*currvarlist,arg->argv[2]);
 		if(pi==NULL){printf("rand: var not found!\n");break;}
 		if(pi->type==REAL)
 			*((float *)pi->value)=(float)c;
@@ -382,7 +528,7 @@ void exec(int comm, args *arg, vars *varlist, int *finger, label *labels, int le
 
 		case 1851876211://scan
 		if(arg->argc==0){getchar();break;}
-		pi=get_var(varlist,arg->argv[0]);
+		pi=get_var(*currvarlist,arg->argv[0]);
 		if(pi==NULL){printf("scan: var not found!\n");break;}
 		sbuf2=malloc(80);
 		c=0;while((sbuf2[c++]=getchar())!='\n');
@@ -439,6 +585,8 @@ void parseargs(args *arg)
 			//printf("arg no.%d starts at pos %d\n",n,arg->poses[n]);
 			break;
 
+			case '\n':goto out;
+
 			case '"':
 			in=!in;
 			break;
@@ -450,6 +598,7 @@ void parseargs(args *arg)
 		//printf("processed #%d [%c]\n",i,arg->all[i]);
 		i++;
 	}
+	out:
 	if(in)c--;
 	buff[c]='\0';
 	arg->argv[arg->argc++]=strdup(buff);
@@ -470,6 +619,7 @@ void dispose_vars(vars *s)
 	int i;
 	for(i=0;i<s->logSize;i++)
 	{
+		//printf("Disposing %s [%d]\n",s->elems[i].name,*((int*)s->elems[i].value));
 		if(s->elems[i].type==STR)free(*((char **)s->elems[i].value));
 		free(s->elems[i].name);
 		free(s->elems[i].value);
@@ -494,6 +644,7 @@ void add_var(vars *s, int elemSize, void *value, char *name, int type)
 	assert(new -> value != NULL);
 	memcpy(new -> value, value, elemSize);
 	
+	//printf("var \"%s\" index - %d\n",new->name,s->logSize);
 	s -> logSize++;
 }
 
@@ -527,6 +678,18 @@ int type(char *str) //guess type by string
 		if(chars==1)
 			return 0;
 	return -1;
+}
+
+int typesize(int type)
+{
+	switch(type)
+	{
+		case INT: return sizeof(int);
+		case CHAR: return sizeof(char);
+		case STR: return sizeof(char*);
+		case REAL: return sizeof(float);
+	}
+	return 0;
 }
 
 char *stype(int type)
@@ -668,15 +831,19 @@ int get_comm(char *input, int *c)
 
 	return comm;
 }
-
+					//if given, write in that
 var *getvarue(char *value, vars *varlist) //if var (starts with $), returns it, esle creates and returns var struct with guessed value
 {
 	var *pi;
 	void *buff;
-	if(value[0]=='$')
-		if((pi=get_var(varlist,value+1))!=0) return pi;
 
-	pi=malloc(sizeof(*pi));
+	if(varlist!=NULL)
+	{
+		if(value[0]=='$')
+			if((pi=get_var(varlist,value+1))!=0) return pi;
+	}
+
+	pi=malloc(sizeof(var));
 	pi->type=type(value);
 
 	switch(pi->type)
@@ -698,10 +865,49 @@ void operation(args *arg, vars *varlist, int op) //void (**op)())
 	if(!check_args(arg,2,0,0))return;
         pi=get_var(varlist,arg->argv[0]);
 	pi2=getvarue(arg->argv[1],varlist);
-        if(pi==NULL){printf("operation: var not found!\n");return;}
+        if(pi==NULL){printf("operation: var \"%s\" found!\n",arg->argv[0]);return;}
         chvar(pi,pi2,op); //op);
 	if(pi2->name==0){
 		if(pi2->type==STR)free(*((char **)pi2->value));
 		free(pi2->value);free(pi2);
 	}
+}
+
+void initsubs(substack *sstack){ //same as init vars (reapiting code TT)
+	sstack -> logSize = 0;
+	sstack -> allocSize = 4;
+
+	sstack -> subs = malloc(sizeof(subroutine)*sstack->allocSize);
+}
+void disposesubs(substack *sstack){
+	free(sstack->subs);
+	//cycle for freeing args
+}
+
+void pushsub(substack *stack, subroutine *sub) //char *args
+{
+	if(stack->logSize > stack->allocSize)
+	{
+		stack->allocSize+=4;
+		stack->subs=realloc(stack->subs,stack->allocSize*sizeof(subroutine*));
+	}
+
+	stack->subs[stack->logSize]=sub;
+	stack->subs[stack->logSize]->locvars=malloc(sizeof(vars));
+	init_vars(stack->subs[stack->logSize]->locvars);
+	stack->logSize++;
+}
+
+subroutine *popsub(substack *stack)
+{
+	if(stack->logSize==0)
+	{
+		printf("attempt to pop empty substack\n");
+		return NULL;
+	}
+
+	stack->logSize--;
+	dispose_vars(stack->subs[stack->logSize]->locvars);
+	free(stack->subs[stack->logSize]->locvars);
+	return stack->subs[stack->logSize];
 }
