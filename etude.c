@@ -243,6 +243,7 @@ int main(int argc, char **argv)
 			subs[sublen].startline=codlen;
 			subs[sublen].argnum=0;
 			subs[sublen].doifsnum=0;
+			subs[sublen].doifacc=0;
 
 			parseargs(&subargbuff);
 			for(c=1;c<subargbuff.argc;c++)
@@ -256,7 +257,6 @@ int main(int argc, char **argv)
 
 			//printf("Adding subroutine %s\n",subargbuff.argv[0]);
 			subs[sublen++].name=strtoi(subargbuff.argv[0],LABLEN);
-			subs[sublen].doifacc=subs[sublen-1].doifsnum;
 			free(subargbuff.argv[0]);
 			break;
 
@@ -266,10 +266,11 @@ int main(int argc, char **argv)
 			{
 				case 1718185828: //doif
 				//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!
+				//printf("INIIALIZING %d\n",subs[sublen-1].doifsnum);
 				subs[sublen-1].doifs[subs[sublen-1].doifsnum].ifline=codlen;
 				subs[sublen-1].doifs[subs[sublen-1].doifsnum].elseline=-1;
-				//subs[sublen-1].doifs[doifqueue[doifc-1]].nests[0]=0;
-				//subs[sublen-1].doifs[doifqueue[doifc-1]].nests[1]=0;
+				subs[sublen-1].doifs[subs[sublen-1].doifsnum].nests[0]=0;
+				subs[sublen-1].doifs[subs[sublen-1].doifsnum].nests[1]=0;
 				//printf("doif. num - %d, line - %d\n",subs[sublen-1].doifsnum,codlen);
 				doifqueue[doifc++]=subs[sublen-1].doifsnum;
 				subs[sublen-1].doifsnum++;
@@ -310,9 +311,10 @@ int main(int argc, char **argv)
 			codlen++;
 			break;
 		}
-
-		free(source[i]);
 	}
+
+	for(i=0;i<slen+1;i++)
+	free(source[i]);
 
 	//for(i=0;i<sublen;i++)
 	//for(n=0;n<subs[i].doifsnum;n++)
@@ -321,17 +323,29 @@ int main(int argc, char **argv)
 	srand(time(NULL));
 
 	callsub("main",&finger,&currvarlist,&sstack,subs,sublen,NULL);
-	doifacc=sstack.subs[0]->doifacc; //0
+	doifacc=0; //sstack.subs[0]->doifacc; //0
 	finger++;
 	//init_vars(&gvarlist);
 
 	//for(c=0;c<argc;c++) printf("%d) %s\n",c,argv[c]);
 
 	do {
-		//printf("%d) executing %d @ %s\n",finger,code[finger].comm,code[finger].arg->all);
 		exec(code,&currvarlist,&finger,labels,&doifacc,leblen,&sstack,subs,sublen);
 		finger++;
 	} while(sstack.logSize>0);//++finger<slen && finger>0);
+
+
+	for(i=0;i<codlen;i++)
+	{
+		if(code[i].arg!=NULL)
+		{
+		for(c=0;c<code[i].arg->argc;c++)
+			free(code[i].arg->argv[c]);
+		free(code[i].arg->argv);
+		free(code[i].arg->poses);
+		free(code[i].arg);
+		}
+	}
 	
 	for(c=0;c<40;c++)
 	{
@@ -461,7 +475,7 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 		break;
 
 		case 1718185828://doif
-		//doif a[0] =[1] b[2] command blah blah[3]
+		// doif a[0] =[1] b[2] command blah blah[3]
 		if(!check_args(arg,3,0,0,0))break;
 		pi=getvarue(arg->argv[0],*currvarlist); //dont forget to free var
 		pi2=getvarue(arg->argv[2],*currvarlist);
@@ -494,7 +508,6 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 				*finger=subs[sstack->logSize-1].doifs[*doifacc].finline;
 				*doifacc+=subs[sstack->logSize-1].doifs[*doifacc].nests[0] + \
 					subs[sstack->logSize-1].doifs[*doifacc].nests[1];
-				(*doifacc)++;
 			}
 			else
 			{
@@ -502,10 +515,10 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 				//printf("In the else branch\n");
 				//printf("else. skipping %d nests\n",subs[sstack->logSize-1].doifs[*doifacc].nests[0]);
 				*finger=subs[sstack->logSize-1].doifs[*doifacc].elseline;
-				doifacc+=subs[sstack->logSize-1].doifs[*doifacc].nests[0];
-				(*doifacc)++;
+				*doifacc+=subs[sstack->logSize-1].doifs[*doifacc].nests[0];
 			}
-		} else (*doifacc)++;
+		}
+		(*doifacc)++;
 		sstack->subs[sstack->logSize-1]->doifacc=*doifacc;
 		//printf("DOIFACC AFTER = %d\n",*doifacc);
 		// if true we skip else, if else we skip true and if fin we skip everything
