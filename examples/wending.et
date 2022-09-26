@@ -1,3 +1,4 @@
+%main
 int money 30
 int choice 0
 
@@ -31,3 +32,4 @@ goto start
 
 !end
 print "No." `
+ret

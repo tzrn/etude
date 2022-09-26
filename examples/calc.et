@@ -1,3 +1,4 @@
+%main
 char action a
 real num1   0
 real num2   0
@@ -35,3 +36,4 @@ print "No such action!" ` `
 !res
 print "Result: " $num1 ` `
 goto start
+ret

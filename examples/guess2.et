@@ -1,3 +1,4 @@
+%main
 int a 0
 int b 0
 int c 1
@@ -10,22 +11,24 @@ rand 1 1000 b
 !input
 scan a
 
-doif $a > $b goto need_less
-doif $a < $b goto need_more
+doif $a > $b
+	print "Less! " `
+	goto retry
+fin
+
+doif $a < $b
+	print "More! " `
+	goto retry
+fin
 
 print "You win!" ` "Press Enter to restart"
 swap c 1
 scan
 goto start
 
-!need_less
-print "Less! " `
-goto retry
-
-!need_more
-print "More! " `
 
 !retry
 sum c 1
 print $c ") Try again: "
 goto input
+ret

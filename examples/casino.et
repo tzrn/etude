@@ -1,3 +1,4 @@
+%main
 real money 500
 int num1   0
 int num2   0
@@ -24,41 +25,30 @@ print "You have: " $money $ ` `
 print "Your bet: "
 scan bet
 
-doif $bet > $money goto nomoney
-goto check_little
+doif $bet > $money
+	print "Not enught money!" ` `
+	goto bet
+fin
 
-!nomoney
-print "Not enught money!" ` `
-goto bet
-
-!check_little
-doif $bet < 1 goto tolittle
-goto guess
-
-!tolittle
-print "You shoud bet more than 0$!" ` `
-goto bet
+doif $bet < 1
+	print "You shoud bet more than 0$!" ` `
+	goto bet
+fin
 
 
 !guess
 print "Your guess: "
 scan guess
 
-doif $guess > 5 goto bigguess
-goto check_smallg
+doif $guess > 5
+	print "Number cannot be more than 5!" ` `
+	goto guess
+fin
 
-!bigguess
-print "Number cannot be more than 5!" ` `
-goto guess
-
-!check_smallg
-doif $guess < 1 goto smallguess
-goto gennums
-
-!smallguess
-print "Number cannot be less than 1!" ` `
-goto guess
-
+doif $guess < 1
+	print "Number cannot be less than 1!" ` `
+	goto guess
+fin
 
 
 !gennums
@@ -75,35 +65,55 @@ print $num3 "   " ` `
 
 
 swap right 0
-doif $guess = $num1 sum right 1
-doif $guess = $num2 sum right 1
-doif $guess = $num3 sum right 1
+doif $guess = $num1
+	sum right 1
+fin
+doif $guess = $num2
+	sum right 1
+fin
+doif $guess = $num3
+	sum right 1
+fin
 print "You got " $right " right!" `
 
 
-doif $right = 0 goto lose
-doif $right = 1 prod bet 1.5
-doif $right = 2 prod bet 3.0
-doif $right = 3 prod bet 9.0
+doif $right = 0
+	print "You lose " $bet $! ` `
+	prod bet -1.0
+else
+	doif $right = 1
+       		prod bet 1.5
+	fin
+	doif $right = 2
+       		prod bet 3.0
+	fin
+	doif $right = 3
+       		prod bet 9.0
+	fin
+	print "You win " $bet $! ` `
+fin
 
-print "You win " $bet $! ` `
-goto sumwin
-
-!lose
-print "You lose " $bet $! ` `
-prod bet -1.0
-
-!sumwin
 sum money $bet
 
 
 print "Continue playing? [y/n]: "
+
 scan re
-doif $re = y goto restart
-doif $re = Y goto restart
+
+doif $re = y
+	goto restart
+fin
+
+doif $re = Y
+	goto restart
+fin
+
 goto end
+
 !restart
 clear
 goto start
 
 !end
+print "Come back again ._." `
+ret

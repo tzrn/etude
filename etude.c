@@ -60,6 +60,11 @@ typedef struct{
 } args;
 
 typedef struct{
+	int comm;
+	args *arg;
+} command;
+
+typedef struct{
 	char *name;
 	void *value;
 	int varSize; // never used but would be wasted any way 'cause of padding
@@ -75,7 +80,15 @@ typedef struct{
 typedef struct{ //label for goto to go to
 	long int name;
 	unsigned int linenum;
+	int doifacc;
 } label;
+
+typedef struct{
+	int ifline;
+	int elseline;
+	int finline;
+	int nests[2]; //how many nested in if and else
+} doif;
 
 typedef struct{
 	int startline;
@@ -84,7 +97,10 @@ typedef struct{
 	vars *locvars;
 	char **argnames;
 	int argnum;
+	int doifacc;
 	var *retvar; //var to return value to
+	doif doifs[40]; //max conditions in an function (make dynamic?)
+	int doifsnum;
 } subroutine;
 
 typedef struct{
@@ -97,6 +113,7 @@ void initsubs(substack *sstack);
 void disposesubs(substack *sstack);
 void pushsub(substack *stack, subroutine *sub); //char *args
 subroutine *popsub(substack *stack);
+void callsub(char *name,int *finger,vars **currvarlist,substack *sstack, subroutine *subs, int sublen, args *arg);
 
 long int strtoi(char *, int len);
 
@@ -135,23 +152,24 @@ void (*sop[2])(char **,char **) = {ssum,sswap};
 
 void operation(args *arg, vars *varlist, int op); //void (**op)()); <-- there was buch of cringe (gone now)
 void chvar(var *value1, var *value2, int op); //void (**change)(void *val1,void *val2));
-void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist,int *finger, label *labels,\
+void exec(command *code, vars **currvarlist,int *finger, label *labels,int *doifacc,\
 		int leblen, substack *sstack, subroutine *subs, int sublen);
 //   ^
 //   |--- whole action is here
 
 int compare(void *val1, void *val2, int type); // 0 - equel; <0 - less; >0 - more
 int get_comm(char *, int *); //return position where args start, int * changed to position of args
+char *skipspaces(char *str);
 
 int main(int argc, char **argv)
 {
-	int c,i,comm,slen=0,finger=0;
-	char b1; //bx - buffer
+	int c,i,n,codlen,slen=0,finger,commbuff,doifc=0;
 	FILE *file;
-	char **source;
+	char **source, *buff;
 
 	label labels[40]; //max labels (put in define?)
 	subroutine subs[40];//reapiting code TT ;;
+	command *code;
 
 	//realloc and dispose needed will do later
 	for(c=0;c<40;c++)subs[c].argnames=malloc(sizeof(char *) * 8);
@@ -159,12 +177,11 @@ int main(int argc, char **argv)
 
 	int leblen=0; //number of labels
 	int sublen=0; //number of subroutines
+	int doifqueue[40];
+	int doifacc;
 
 	initsubs(&sstack);
-	//global
-	vars gvarlist; // now that i think, some of these could be global
-	vars *currvarlist = &gvarlist;
-	args arg;     // especially arg and varlist
+	vars *currvarlist; // now that i think, some of these could be global
 	args subargbuff;
 	
 	setbuf(stdout, NULL); //without this, buffer flushes only with \n (bad for wait command)
@@ -179,42 +196,13 @@ int main(int argc, char **argv)
 	source=malloc(sizeof(char *)*SOURCE_MAX); //max strings in source file
 	source[0]=malloc(INP_MAX);
 
-	subargbuff.argv=malloc(sizeof(char *)*ARG_MAX);
-	subargbuff.poses=malloc(sizeof(int)*ARG_MAX);
-
 	while(fgets(source[slen],INP_MAX,file)!=NULL)
 	{
-		switch(*source[slen])
+		switch(*source[slen]) //add support for spaces and tabs at the beginning
 		{
 			case '\n': //empty strings
 			break;
-
-			case '@': //comments
-			break;
 	
-			case '!': //labels
-			labels[leblen].linenum=slen;
-			labels[leblen++].name=strtoi(source[slen]+1,LABLEN);		
-			//printf("%d  %s - #%d\n",leblen,source[slen],slen);
-			break;
-	
-			case '%': //subroutines
-			subargbuff.all=source[slen]+1;
-			subs[sublen].startline=slen;
-			subs[sublen].argnum=0;
-
-			parseargs(&subargbuff);
-			for(c=1;c<subargbuff.argc;c++)
-			{
-				//printf("adding arg \"%s\"\n",subargbuff.argv[c]);
-				subs[sublen].argnames[c-1]=strdup(subargbuff.argv[c]);
-				free(subargbuff.argv[c]);
-				subs[sublen].argnum++;
-			}
-
-			subs[sublen++].name=strtoi(subargbuff.argv[0],LABLEN);
-			break;
-
 			default:
 			//printf("%d %s",slen,source[slen]);
 			source[++slen]=malloc(INP_MAX); //this is dumb!
@@ -224,36 +212,126 @@ int main(int argc, char **argv)
 	fclose(file);
 	if(slen==0){return 0;}
 
+	subargbuff.argv=malloc(sizeof(char *)*ARG_MAX);
+	subargbuff.poses=malloc(sizeof(int)*ARG_MAX);
+
+ 	code = malloc(sizeof(command) * slen);
+	codlen = 0;
+	doifc=0;
+
+	for(i=0;i<slen;i++)
+	{
+		buff=skipspaces(source[i]);
+		//printf("PARSING - %s",buff);
+		//printf("First char - %c\n",*buff);
+		
+		switch(*buff)
+		{
+			case '@':
+			break;
+
+			case '!': //labels
+			//printf("%d  %s - #%d\n",leblen,source[i],slen);
+			labels[leblen].linenum=codlen;
+			labels[leblen].doifacc=subs[sublen-1].doifsnum;
+			labels[leblen++].name=strtoi(source[i]+1,LABLEN);		
+			break;
+	
+			case '%': //subroutines
+			subargbuff.all=source[i]+1;
+			//printf("i = %d;  codlen - %d\n",i,codlen);
+			subs[sublen].startline=codlen;
+			subs[sublen].argnum=0;
+			subs[sublen].doifsnum=0;
+
+			parseargs(&subargbuff);
+			for(c=1;c<subargbuff.argc;c++)
+			{
+				//printf("adding arg \"%s\"\n",subargbuff.argv[c]);
+				subs[sublen].argnames[c-1]=strdup(subargbuff.argv[c]);
+				//printf("CLEARING \"%s\"\n",subargbuff.argv[c]);
+				free(subargbuff.argv[c]);
+				subs[sublen].argnum++;
+			}
+
+			//printf("Adding subroutine %s\n",subargbuff.argv[0]);
+			subs[sublen++].name=strtoi(subargbuff.argv[0],LABLEN);
+			subs[sublen].doifacc=subs[sublen-1].doifsnum;
+			free(subargbuff.argv[0]);
+			break;
+
+			default:
+			commbuff=get_comm(buff,&c);
+			switch(commbuff)
+			{
+				case 1718185828: //doif
+				//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!
+				subs[sublen-1].doifs[subs[sublen-1].doifsnum].ifline=codlen;
+				subs[sublen-1].doifs[subs[sublen-1].doifsnum].elseline=-1;
+				//subs[sublen-1].doifs[doifqueue[doifc-1]].nests[0]=0;
+				//subs[sublen-1].doifs[doifqueue[doifc-1]].nests[1]=0;
+				//printf("doif. num - %d, line - %d\n",subs[sublen-1].doifsnum,codlen);
+				doifqueue[doifc++]=subs[sublen-1].doifsnum;
+				subs[sublen-1].doifsnum++;
+				break;
+
+				case 1702063205: //else
+				subs[sublen-1].doifs[doifqueue[doifc-1]].elseline=codlen;
+				/*printf("else. num - %d, line - %d\n",\
+					doifqueue[doifc-1],codlen);*/
+				break;
+
+				case 7235942: //fin doifqueue is bsically a stack
+				for(n=0;n<doifc-1;n++)
+				//how many loops are nested in if and else
+				if(subs[sublen-1].doifs[doifqueue[n]].elseline==-1)
+				subs[sublen-1].doifs[doifqueue[n]].nests[0]++;
+				else
+				subs[sublen-1].doifs[doifqueue[n]].nests[1]++;
+
+
+				subs[sublen-1].doifs[doifqueue[doifc-1]].finline=codlen;
+				/*printf("fin. num - %d, line - %d\n",\
+					doifqueue[doifc-1],codlen);*/
+				doifc--;
+				break;
+			}
+			code[codlen].comm=commbuff;
+	
+			if(c!=-1)
+			{
+				code[codlen].arg=malloc(sizeof(args));
+				code[codlen].arg->argv=malloc(sizeof(char *)*ARG_MAX);
+				code[codlen].arg->poses=malloc(sizeof(int)*ARG_MAX);
+				code[codlen].arg->all=buff+c;
+				parseargs(code[codlen].arg); //if some chars after command
+			} else code[codlen].arg=NULL;
+			//printf("%d. %s\n",codlen,source[i]);
+			codlen++;
+			break;
+		}
+
+		free(source[i]);
+	}
+
+	//for(i=0;i<sublen;i++)
+	//for(n=0;n<subs[i].doifsnum;n++)
+	//printf("COND N.%d - nedsted in if %d | in else  %d\n",n,subs[i].doifs[n].nests[0],subs[i].doifs[n].nests[1]);
+
 	srand(time(NULL));
 
-	init_vars(&gvarlist);
-	arg.argv=malloc(sizeof(char *)*ARG_MAX);
-	arg.poses=malloc(sizeof(int)*ARG_MAX);
-	char *input=malloc(INP_MAX); //free at the end!
+	callsub("main",&finger,&currvarlist,&sstack,subs,sublen,NULL);
+	doifacc=sstack.subs[0]->doifacc; //0
+	finger++;
+	//init_vars(&gvarlist);
 
 	//for(c=0;c<argc;c++) printf("%d) %s\n",c,argv[c]);
 
 	do {
-		//for(c=0; (b1=getchar())!='\n'; input[c++] = b1);
-		//printf("finger is on %d %s",finger, source[finger]);
-		for(c=0; (b1=source[finger][c])!='\n'; input[c++]=b1); // doin' in manual cause just copypaste of interactive
-		input[c]=0; // also replaces \n
-		//printf("input - %s\n",input);
-		//printf("slen - %d\n",slen);
-
-		comm=get_comm(input,&c);
-		//if(comm==0) continue;
-
-		if(c!=-1)
-		{
-			arg.all=input+c;
-			parseargs(&arg); //if some chars after command
-		}
-		else arg.argc=0;
-		//printf("executing %d @ %s\n",comm,arg.all);
-		exec(comm,&arg,&gvarlist,&currvarlist,&finger,labels,leblen,&sstack,subs,sublen);
-		for(c=0;c<arg.argc;c++)free(arg.argv[c]);
-	} while(++finger<slen && finger>0);
+		//printf("%d) executing %d @ %s\n",finger,code[finger].comm,code[finger].arg->all);
+		exec(code,&currvarlist,&finger,labels,&doifacc,leblen,&sstack,subs,sublen);
+		finger++;
+	} while(sstack.logSize>0);//++finger<slen && finger>0);
 	
 	for(c=0;c<40;c++)
 	{
@@ -262,30 +340,28 @@ int main(int argc, char **argv)
 		free(subs[c].argnames);
 	}
 
-	dispose_vars(&gvarlist); //if global needed
 	disposesubs(&sstack);
-	free(input);
+	free(code);
 	//FUNCTION FINCTION FUNTION DISPOSE(ARGV/SUBARGBUFF)
-	if(sublen>0)free(subargbuff.argv[0]);
 	free(subargbuff.argv);
 	free(subargbuff.poses);
-	free(arg.poses);
-	free(arg.argv);
-	for(c=0;c<slen+1;c++)free(source[c]);
+	//for(c=0;c<slen+1;c++)free(source[c]);
 	free(source);
 	return 0;
 }
 
-void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, label *labels,\
+void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doifacc,\
 	       	int leblen, substack *sstack, subroutine *subs, int sublen)
 {
-	int c,i,min,max,ivarb, newcomm,jepp;
+	int c,i,min,max,ivarb,jepp;
 	long int lgo; //to compare with label name
 	float fvarb; // buffer for float var
 	var *pi, *pi2; //initially was supposed to point to var type (point to int)
 	char *sbuf, *sbuf2; //for creating string and for doif if both are not variables (second one is also for anything else)
-	args argif; // <-- Example of a bad code design - a variable in case i do doif
-	subroutine *wayback;//帰り
+	subroutine *wayback;//帰り道
+
+	int comm = code[*finger].comm;
+	args *arg = code[*finger].arg;
 
 	switch(comm) //is it even ok for a switch to be so long?
 	{
@@ -323,6 +399,7 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 		break;
 
 		case 1701869940: //type
+		if(!check_args(arg,1,0))break;
 		printf("%s => %s\n",arg->argv[0],stype(type(arg->argv[0])));
 		break;
 
@@ -385,9 +462,9 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 
 		case 1718185828://doif
 		//doif a[0] =[1] b[2] command blah blah[3]
+		if(!check_args(arg,3,0,0,0))break;
 		pi=getvarue(arg->argv[0],*currvarlist); //dont forget to free var
 		pi2=getvarue(arg->argv[2],*currvarlist);
-		//printf("%c %c %c\n",*((char *)pi->value),*arg->argv[1],*((char *)pi2->value));
 
 		jepp = 0;
 		switch(arg->argv[1][0])
@@ -402,20 +479,53 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 			if(compare(pi->value,pi2->value,pi->type)<0) jepp = 1;
 			break;
 		}
-		if(jepp==1)
-		{
-			newcomm=get_comm((arg->all)+(arg->poses[3]),&c);
-			argif.all=arg->all+arg->poses[3]+c;
-			argif.argv=malloc(sizeof(char *)*8);
-			argif.poses=malloc(sizeof(int)*8);
-			parseargs(&argif); //<-- freeeee
-			exec(newcomm,&argif,gvarlist,currvarlist,finger,labels,leblen,sstack,subs,sublen);
-			for(c=0;c<argif.argc;c++)free(argif.argv[c]);
-			free(argif.argv);
-			free(argif.poses);
-		}
+		//printf("\n\nDOIFACC BEFORE = %d\n",*doifacc);
+		//printf("%d %c %d = %d\n",*((int*)pi->value),*arg->argv[1],*((int*)pi2->value),jepp);
+
+		if(!jepp)
+	       	{
+			//if there is no else branch
+			if(subs[sstack->logSize-1].doifs[*doifacc].elseline==-1)
+			{
+				//skip nested
+				//printf("There is no else branch\n");
+				//printf("skipping %d nests\n",subs[sstack->logSize-1].doifs[*doifacc].nests[0] + subs[sstack->logSize-1].doifs[*doifacc].nests[1]);
+				//printf("fin. jumping to %d\n",subs[sstack->logSize-1].doifs[*doifacc].finline);
+				*finger=subs[sstack->logSize-1].doifs[*doifacc].finline;
+				*doifacc+=subs[sstack->logSize-1].doifs[*doifacc].nests[0] + \
+					subs[sstack->logSize-1].doifs[*doifacc].nests[1];
+				(*doifacc)++;
+			}
+			else
+			{
+				//printf("else. jumping to %d\n",subs[sstack->logSize-1].doifs[*doifacc].elseline);
+				//printf("In the else branch\n");
+				//printf("else. skipping %d nests\n",subs[sstack->logSize-1].doifs[*doifacc].nests[0]);
+				*finger=subs[sstack->logSize-1].doifs[*doifacc].elseline;
+				doifacc+=subs[sstack->logSize-1].doifs[*doifacc].nests[0];
+				(*doifacc)++;
+			}
+		} else (*doifacc)++;
+		sstack->subs[sstack->logSize-1]->doifacc=*doifacc;
+		//printf("DOIFACC AFTER = %d\n",*doifacc);
+		// if true we skip else, if else we skip true and if fin we skip everything
+
 		if(pi->name==0) {free(pi->value);free(pi);}
 		if(pi2->name==0) {free(pi2->value);free(pi2);}
+		break;
+
+		case 1702063205://else
+		//printf("else comm. jumping to %d doifacc - %d\n",subs[sstack->logSize-1].doifs[*doifacc-1].finline,*doifacc);
+		//skip else if reached from if
+		*finger=subs[sstack->logSize-1].doifs[*doifacc-1].finline;
+		*doifacc+=subs[sstack->logSize-1].doifs[*doifacc-1].nests[1];
+		sstack->subs[sstack->logSize-1]->doifacc=*doifacc;
+		//printf("DOIFACC AFTER = %d\n",*doifacc);
+		break;
+
+		case 7235942://fin
+		//(*doifacc)++;
+		//printf("in fin. doifacc - %d\n",*doifacc);
 		break;
 
 		case 1869901671://goto
@@ -427,6 +537,8 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 			{
 			//printf("%li = %li\n",lgo,labels[i].name);
 			//printf("found %s, jumping to %d\n",arg->argv[0],*finger+3);
+			//printf("changing doifacc to %d\n",labels[i].doifacc);
+			*doifacc=labels[i].doifacc;
 			*finger=labels[i].linenum-1;
 			goto fi;
 			}
@@ -438,42 +550,13 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 
 		case 1970499431://gosu(b)
 		if(!check_args(arg,1,0))break;
-		lgo=strtoi(arg->argv[0],LABLEN);
-		for(i=0;i<sublen;i++)
-		{
-			if(lgo==subs[i].name)
-			{
-			//void add_var(vars *s, int elemSize, void *value, char *name, int type)
-			pushsub(sstack,subs+i);
-			subs[i].retline=*finger;
-			*finger=subs[i].startline-1;
-
-			for(c=1; c<arg->argc && arg->argv[c][0]!='>'; c++) //convert arguments to local variables
-			{
-				pi=getvarue(arg->argv[c],NULL);
-				add_var(subs[i].locvars,typesize(pi->type),
-					pi->value,subs[i].argnames[c-1],pi->type);
-				free(pi->value); //this is dumb 'cause i could just giveaway
-				//pointer to new var, but instead i copying and freeing this one
-				free(pi);
-			}
-			
-			if(c<arg->argc) //if '>' exists
-				subs[i].retvar=get_var(*currvarlist,arg->argv[c+1]);
-			else
-				subs[i].retvar=NULL;
-
-			*currvarlist=subs[i].locvars;
-			goto sfi;
-			}
-		}
-
-		printf("%d subroutine \"%s\" not found!\n",*finger,arg->argv[0]);
-		sfi:
+		callsub(arg->argv[0],finger,currvarlist,sstack,subs,sublen,arg);
+		*doifacc=sstack->subs[sstack->logSize-1]->doifacc;
+		//printf("Setting doifacc to %d\n\n",*doifacc);
 		break;
 
 		case 7628146://ret(urn)
-		if(arg->argc>0) //return value to the var
+		if(arg!=NULL) //return value to the var
 		{
 			pi=getvarue(arg->argv[0],*currvarlist);
 
@@ -485,18 +568,19 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 		}
 		wayback=popsub(sstack);	
 		
-		if(sstack->logSize==0)
-			*currvarlist=gvarlist;
-		else
+		if(sstack->logSize>0) //when not popping main
+		{
 			*currvarlist=sstack->subs[sstack->logSize-1]->locvars;
-
+			*doifacc=sstack->subs[sstack->logSize-1]->doifacc;
+		}
 		*finger=wayback->retline;
 		break;
 
 		//glob command to go back to global varlist to be able to goto from gosub to main
 		//or to use global vars in sub
+		//DO NOT GOTO BETWEED SUBS THAT WILL BREAK CONDITIONS
 		case 1651469415://glob
-		*currvarlist=gvarlist;	
+		*currvarlist=sstack->subs[0]->locvars;
 		break;
 
 		case 6516588://loc go back to local
@@ -506,10 +590,6 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 			break;
 		}
 		*currvarlist=sstack->subs[sstack->logSize-1]->locvars;
-		break;
-
-		case 6581861://end
-		*finger=-1;
 		break;
 
 		case 1684955506://rand
@@ -527,7 +607,7 @@ void exec(int comm, args *arg, vars *gvarlist, vars **currvarlist, int *finger, 
 		break;
 
 		case 1851876211://scan
-		if(arg->argc==0){getchar();break;}
+		if(arg==NULL){getchar();break;}
 		pi=get_var(*currvarlist,arg->argv[0]);
 		if(pi==NULL){printf("scan: var not found!\n");break;}
 		sbuf2=malloc(80);
@@ -575,14 +655,19 @@ void parseargs(args *arg)
 	{
 		switch(arg->all[i])
 		{
-			case ' ':
+			case ' ':case '	':
 			if(in){buff[c++]=arg->all[i];break;}
 			buff[c]='\0';
 			c=0;
 			arg->argv[arg->argc++]=strdup(buff);
 			while(arg->all[i+1]==' ')i++;
+			if(arg->all[i+1]=='\n')
+			{
+				free(buff);
+				return; //if spaces at the end but no args
+			}
 			arg->poses[arg->argc]=i+1;
-			//printf("arg no.%d starts at pos %d\n",n,arg->poses[n]);
+			//printf("arg no.%d [%s] starts at pos %d\n",arg->argc,arg->argv[arg->argc-1],arg->poses[arg->argc]);
 			break;
 
 			case '\n':goto out;
@@ -595,7 +680,6 @@ void parseargs(args *arg)
 			buff[c++]=arg->all[i];
 			break;
 		}
-		//printf("processed #%d [%c]\n",i,arg->all[i]);
 		i++;
 	}
 	out:
@@ -711,7 +795,7 @@ int check_args(args *arg, int min, ...) // 1 - same 0 - any
 	va_start(types, min);
 	int same; //type that all args sould be
 
-	if(arg->argc < min)
+	if(arg->argc < min || (min > 0 && arg == NULL))
 	{
 		printf("Not enough arguments!\n");
 		va_end(types);
@@ -803,13 +887,18 @@ int compare(void *val1, void *val2, int type) // 0 - equel; <0 - less; >0 - more
 	return 0;
 }
 
+char *skipspaces(char *str)
+{
+	int s=0;
+	if(*str==0){return 0;} //empty
+	while(str[s]==' ' || str[s]=='	')s++; //skip spaces
+	return str+s;
+}
+
 int get_comm(char *input, int *c)
 {
 	int s=0, b=0, comm; //str counter and buff counter
 	char *buff=malloc(COMM_MAX);
-
-	if(*input==0){free(buff);return 0;}
-	while(input[s]==' ')s++; //skip spaces
 
 	while(input[s]!=' ' && input[s]!=0) //FOR FOR FOR?
 	{
@@ -865,7 +954,7 @@ void operation(args *arg, vars *varlist, int op) //void (**op)())
 	if(!check_args(arg,2,0,0))return;
         pi=get_var(varlist,arg->argv[0]);
 	pi2=getvarue(arg->argv[1],varlist);
-        if(pi==NULL){printf("operation: var \"%s\" found!\n",arg->argv[0]);return;}
+        if(pi==NULL){printf("operation: var \"%s\" not found!\n",arg->argv[0]);return;}
         chvar(pi,pi2,op); //op);
 	if(pi2->name==0){
 		if(pi2->type==STR)free(*((char **)pi2->value));
@@ -893,6 +982,7 @@ void pushsub(substack *stack, subroutine *sub) //char *args
 	}
 
 	stack->subs[stack->logSize]=sub;
+	stack->subs[stack->logSize]->doifacc=0;
 	stack->subs[stack->logSize]->locvars=malloc(sizeof(vars));
 	init_vars(stack->subs[stack->logSize]->locvars);
 	stack->logSize++;
@@ -910,4 +1000,48 @@ subroutine *popsub(substack *stack)
 	dispose_vars(stack->subs[stack->logSize]->locvars);
 	free(stack->subs[stack->logSize]->locvars);
 	return stack->subs[stack->logSize];
+}
+
+void callsub(char *name,int *finger,vars **currvarlist,substack *sstack, subroutine *subs, int sublen, args *arg)
+{
+	long int lgo=strtoi(name,LABLEN);
+	var *pi;
+	int i,c;
+
+	for(i=0;i<sublen;i++)
+	{
+		if(lgo==subs[i].name)
+		{
+		//void add_var(vars *s, int elemSize, void *value, char *name, int type)
+		subs[i].retline=*finger;
+		*finger=subs[i].startline-1;
+		pushsub(sstack,subs+i);
+
+		if(arg!=NULL)
+		{ //taking argumets
+		for(c=1; c<arg->argc && arg->argv[c][0]!='>'; c++) //convert arguments to local variables
+		{
+			//printf("arg - %s\n",arg->argv[c]);
+			pi=getvarue(arg->argv[c],subs[sstack->logSize-2].locvars);
+			add_var(subs[i].locvars,typesize(pi->type),
+				pi->value,subs[i].argnames[c-1],pi->type);
+			//it's seems it's already being freed in getvarue or something
+			//free(pi->value); //this is dumb 'cause i could just giveaway
+			//pointer to new var, but instead i copying and freeing this one
+			//free(pi);
+		}
+		
+		if(c<arg->argc) //if '>' exists
+			subs[i].retvar=get_var(*currvarlist,arg->argv[c+1]);
+		else
+			subs[i].retvar=NULL;
+		}
+
+		*currvarlist=subs[i].locvars;
+		goto sfi;
+		}
+	}
+	printf("%d subroutine \"%s\" not found!\n",*finger,name);
+	sfi:
+	return;
 }
