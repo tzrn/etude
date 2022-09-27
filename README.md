@@ -25,6 +25,8 @@ Only 4 first charecter of a command matter (prin and printf is the same command)
 **Creating variables**
 + There are 4 variable types - **int, real, char, str**
 + To create a variable you write it's type followed by its name and it's value (e.g. `int a 0` `str s text`)
++ there is also an **iarr** type (integer array). To create it you write iarr and number of elements: `iarr 10`
++ you can access array elements like this: `print /arr/0`, `swap /arr/$a /arr2/4`
 + You cannot leave out the value
 + command `list` lists all variables and their values
 
