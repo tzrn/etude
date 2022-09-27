@@ -15,6 +15,7 @@ It's all in one file. To compile it just run `gcc etude.c -o etude`.
 The program in etude is a series of commands. One command a string.
 + The execution starts from %main routine
 ```
+@a comment. starts with '@'.
 %main
 print "Hello world!" `
 ret
