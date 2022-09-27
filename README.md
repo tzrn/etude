@@ -13,6 +13,12 @@ It's all in one file. To compile it just run `gcc etude.c -o etude`.
 
 # Quick reference
 The program in etude is a series of commands. One command a string.
++ The execution starts from %main routine
+```
+%main
+print "Hello world!" `
+ret
+```
 
 Only 4 first charecter of a command matter (prin and printf is the same command), unless command is shorter than 4 charecters (e.g. int)
 
@@ -39,7 +45,19 @@ Only 4 first charecter of a command matter (prin and printf is the same command)
 + to add a new string use ` charecter 
 
 **Control flow**
-+ Command **doif** takes a condition and a command. It executes command only if the statement true.
++ **doif - else - fin** (or just doif - fin) - conditions, can be nested.
++ you can goto between conditions but do not goto between subroutines. ever.
+Doif example:
+```
+doif $a > 10
+  printf "more than 10" `
+  doif $a < 20
+    printf "but less than 20" `
+  fin
+else
+  printf "less or quel to 10" `
+fin
+```
 + Use $ to compare variables
 + Comparation types - =,<,> (e.g. `doif $a > 10 print big`)
 + use exclamaition point with a word (up to 16 bytes) to create a **label**
@@ -65,7 +83,7 @@ Here's an example
 int n 0 
 gosu avarage 250 600 > n 
 print $n `
-end                                                                                                     
+end
 
 %avarage a b 
 sum a $b
