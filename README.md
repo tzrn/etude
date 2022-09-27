@@ -79,14 +79,14 @@ doif $a < 11 goto loop
 + do define whar args subroutine takes put them after sobroutine definition (e.g. `%mod x y`). They will be converted to vars.
 + to pass args give write them after gosub. To write returen value to a variable write > var after that.
 + to return value put it after ret (you can return vars using $)
-+ You should put them in the end of program. Put **end** after your main program or it will start to execute all the subroutines.
 
 Here's an example
 ```
+%main
 int n 0 
 gosu avarage 250 600 > n 
 print $n `
-end
+ret
 
 %avarage a b 
 sum a $b
