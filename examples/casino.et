@@ -25,13 +25,11 @@ print "You have: " $money $ ` `
 print "Your bet: "
 scan bet
 
-printf FIRST `
 doif $bet > $money
 	print "Not enught money!" ` `
 	goto bet
 fin
 
-printf SECOND `
 doif $bet < 1
 	print "You shoud bet more than 0$!" ` `
 	goto bet
