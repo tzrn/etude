@@ -49,7 +49,8 @@ typedef enum{
 	STR=-1,
 	CHAR,
 	INT,
-	REAL
+	REAL,
+	IARR
 } type_e;
 
 typedef struct{
@@ -69,6 +70,7 @@ typedef struct{
 	void *value;
 	int varSize; // never used but would be wasted any way 'cause of padding
 	type_e type; // 1 - Int; 2 - Real; 0 - Char; -1 - String; (can be interpreted as any);
+	int useindex; // current index being used if array
 } var;
 
 typedef struct{
@@ -131,6 +133,7 @@ int check_args(args *, int min_count,...);
 var *get_var(vars *varlist,char *name); //search for var struct
 void get_str_value(void *addr, char **str, int type); //of a var
 var *getvarue(char *value, vars *varlist);
+char **split(char *str,char del);
 
 void isum (int *x, int *y){*x+=*y;}
 void isub (int *x, int *y){*x-=*y;}
@@ -387,20 +390,17 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 		system(arg->all);
 		break;
 
-		case 1852404336: //prin
+		case 1852404336: //prin# <-for search
 		for(c=0;c<arg->argc;c++)
 		{
 			switch(arg->argv[c][0])
 			{
-				case '$':
-				pi=get_var(*currvarlist,arg->argv[c]+1);
-				if(pi!=NULL)
-				{
-					get_str_value(pi->value,&sbuf2,pi->type);
-					printf("%s",sbuf2);
-					free(sbuf2);
-					continue;
-				} else printf("%s",arg->argv[c]);
+				case '$':case '/':
+				pi=getvarue(arg->argv[c],*currvarlist);
+				get_str_value(pi->value,&sbuf2,pi->type);
+				printf("%s",sbuf2);
+				free(sbuf2);
+				continue;
 				break;
 				case '`':
 				printf("\n");
@@ -420,24 +420,28 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 		case 7630441: //int
 		if(!check_args(arg,2,0,0))break;
 		ivarb = atoi(arg->argv[1]);
-		add_var(*currvarlist,sizeof(int),&ivarb,arg->argv[0],1); //vars size value name type
+		add_var(*currvarlist,sizeof(int),&ivarb,arg->argv[0],INT); //vars size value name type
 		break;
 
 		case 1818322290: //real
 		if(!check_args(arg,2,0,0))break;
 		fvarb = atof(arg->argv[1]);
-		add_var(*currvarlist,sizeof(float),&fvarb,arg->argv[0],2); //vars size value name type
+		add_var(*currvarlist,sizeof(float),&fvarb,arg->argv[0],REAL); //vars size value name type
 		break;
 
 		case 1918986339: //char
 		if(!check_args(arg,2,0,0))break;
-		add_var(*currvarlist,sizeof(char),arg->argv[1],arg->argv[0],0);
+		add_var(*currvarlist,sizeof(char),arg->argv[1],arg->argv[0],CHAR);
 		break;
 
 		case 7500915: //str
 		if(!check_args(arg,2,0,0))break;
 		sbuf=strdup(arg->argv[1]);
-		add_var(*currvarlist,sizeof(char *),&sbuf,arg->argv[0],-1); //vars size value name type
+		add_var(*currvarlist,sizeof(char *),&sbuf,arg->argv[0],STR); //vars size value name type
+		break;
+		case 1920098665: //iarr
+		if(!check_args(arg,2,0,0))break;
+		add_var(*currvarlist,sizeof(int *)*atoi(arg->argv[1]),NULL,arg->argv[0],IARR); //vars size value name type
 		break;
 
 		case 1885435763: //swap //so 0 sum 1 swap 2 sub 3 divi 4 prod
@@ -462,11 +466,15 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 		case 1953720684: //list list all variables in current scope and info about them
 		for(pi = (*currvarlist)->elems;pi<(*currvarlist)->elems+(*currvarlist)->logSize;pi++)
 		{
-			printf("#%p \"%s\" [",pi->value,pi->name);
-			get_str_value(pi->value,&sbuf2,pi->type);
-			printf("%s",sbuf2);
-			printf("]\n");
-			free(sbuf2);
+			printf("#%p \"%s\" ",pi->value,pi->name);
+			if(pi->type!=IARR)
+			{
+				get_str_value(pi->value,&sbuf2,pi->type);
+				printf("[%s",sbuf2);
+				putchar(']');
+				free(sbuf2);
+			}
+			putchar('\n');
 		}
 		break;
 
@@ -738,8 +746,8 @@ void add_var(vars *s, int elemSize, void *value, char *name, int type)
 	new -> name = strdup(name);
 	new -> value = malloc(elemSize);
 	new -> type = type;
-	assert(new -> value != NULL);
-	memcpy(new -> value, value, elemSize);
+	//assert(new -> value != NULL);
+	if(value != NULL)memcpy(new -> value, value, elemSize);
 	
 	//printf("var \"%s\" index - %d\n",new->name,s->logSize);
 	s -> logSize++;
@@ -843,6 +851,32 @@ var *get_var(vars *varlist,char *name) //search for var struct
 	return NULL;
 }
 
+char **split(char *str, char del) //can only split in two, skips delimeter
+{
+	char **buff = malloc(sizeof(char *)*2);
+	int done = 0, i;
+
+	for(i=0;str[i]!=0 && done < 2;i++)
+	{
+		if(str[i]==del || str[i]==0)
+		{
+			if(!done)
+			{
+			str[i]=0;
+			buff[0]=str;
+			buff[1]=str+i+1;
+			return buff;
+			}
+		}
+	}
+
+	//printf("--> %s <--\n",buff[0]);
+	//printf("--> %s <--\n",buff[1]);
+	buff[0]=str;
+	buff[1]=NULL;
+	return buff; //free
+}
+
 void get_str_value(void *addr,char **str, int type) //covert value of a var to string
 {
 	if(type==STR)
@@ -876,7 +910,13 @@ void chvar(var *value1, var *value2,int op) //void (**change)(void *val1,void *v
 		//printf("int chvar 1- %s\n",*((char**)value1->value));
 		//printf("int chvar 2- %s\n",*((char**)value2->value));
 		(sop)[op](value1->value,value2->value);
-		return;
+		break;
+
+		case IARR:
+		//printf("VALUE BEFORE - %d\n",*(((int *)value1->value)+value1->useindex));
+		(iop)[op]( ((int *)value1->value)+value1->useindex,value2->value);
+		//printf("VALUE AFTER - %d\n",*(((int *)value1->value)+value1->useindex));
+		break;
 
 		default:
 		printf("not implemented\n");
@@ -936,13 +976,35 @@ int get_comm(char *input, int *c)
 					//if given, write in that
 var *getvarue(char *value, vars *varlist) //if var (starts with $), returns it, esle creates and returns var struct with guessed value
 {
-	var *pi;
+	var *pi,*pi2, *arrpi;
 	void *buff;
+	int index;
+	char **buffer;
 
 	if(varlist!=NULL)
 	{
-		if(value[0]=='$')
+		switch(value[0])
+		{
+			case '$':
 			if((pi=get_var(varlist,value+1))!=0) return pi;
+			break;
+			
+			case '/': //IARR
+			buffer=split(value+1,'/');
+			pi2=getvarue(buffer[1],varlist); //index FREEEEEEE
+			index=*((int *)pi2->value);
+
+			if((arrpi=get_var(varlist,buffer[0]))!=0) 
+			pi=malloc(sizeof(var));
+			pi->value=malloc(sizeof(int));
+			buff=malloc(sizeof(int));
+			*((int*)buff) = *((int *)arrpi->value+index);
+			pi->value=buff;
+			pi->type=INT;
+			pi->name=0;
+			return pi;
+			break;
+		}
 	}
 
 	pi=malloc(sizeof(var));
@@ -965,10 +1027,26 @@ void operation(args *arg, vars *varlist, int op) //void (**op)())
 {
 	var *pi,*pi2;
 	if(!check_args(arg,2,0,0))return;
+
+	if(arg->argv[0][0]=='/')
+	{
+		char **buff=split(arg->argv[0]+1,'/');
+		pi2=getvarue(buff[1],varlist); //index FREEEEEEE
+		int index=*((int *)pi2->value);
+		
+        	pi=get_var(varlist,buff[0]);
+		pi->useindex=index;
+		pi->type=IARR;
+		free(buff);
+	}
+	else
         pi=get_var(varlist,arg->argv[0]);
+
 	pi2=getvarue(arg->argv[1],varlist);
         if(pi==NULL){printf("operation: var \"%s\" not found!\n",arg->argv[0]);return;}
+
         chvar(pi,pi2,op); //op);
+
 	if(pi2->name==0){
 		if(pi2->type==STR)free(*((char **)pi2->value));
 		free(pi2->value);free(pi2);
