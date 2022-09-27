@@ -1,0 +1,106 @@
+%main
+
+iarr ruleset 8
+iarr curr 100
+iarr next 100
+int n 0
+int val 0
+int num1 0
+int num2 0
+int num3 0
+int c 0
+
+swap /ruleset/0 0
+swap /ruleset/1 1
+swap /ruleset/2 0
+swap /ruleset/3 1
+swap /ruleset/4 1
+swap /ruleset/5 0
+swap /ruleset/6 1
+swap /ruleset/7 0
+
+!clear
+doif $n < 100
+	swap /curr/$n 0
+	sum n 1
+	goto clear
+fin
+swap /curr/50 1
+
+swap n 1
+
+!genesis
+@except 99 and 0
+doif $n < 99
+	swap c $n
+
+@n-1
+	sub c 1
+	swap num1 /curr/$c
+@n
+	swap num2 /curr/$n
+@n+1
+	sum c 2
+	swap num3 /curr/$c
+
+@print $num1 $num2 $num3 `
+
+	gosub value $num1 $num2 $num3 > val
+	sum n 1
+	swap /next/$n /ruleset/$val
+	goto genesis
+fin
+
+swap num1 /curr/99
+swap num2 /curr/0
+swap num3 /curr/1
+gosub value $num1 $num2 $num3 > val
+swap /next/0 /ruleset/$val
+
+swap num1 /curr/98
+swap num2 /curr/99
+swap num3 /curr/0
+gosub value $num1 $num2 $num3 > val
+swap /next/99 /ruleset/$val
+
+swap n 0
+!display
+doif $n < 100
+	doif /next/$n = 0
+		print " "
+	else
+		print "@"
+	fin
+	sum n 1
+	goto display
+fin
+@print `
+
+swap n 0
+!copy
+doif $n < 100
+	swap /curr/$n /next/$n
+	sum n 1
+	goto copy
+fin
+
+scan
+swap n 1
+
+goto genesis
+ret
+
+
+%value val1 val2 val3
+int new 0
+@print $val1 $val2 $val3 `
+doif $val1 = 1
+	sum new 1
+fin
+doif $val2 = 1
+	sum new 2
+fin
+doif $val3 = 1
+	sum new 4
+fin
+ret $new

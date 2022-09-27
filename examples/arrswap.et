@@ -1,0 +1,10 @@
+%main
+
+iarr a 2
+iarr b 2
+
+swap /a/0 3
+swap /b/0 /a/0
+print /b/0 `
+
+ret

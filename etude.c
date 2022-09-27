@@ -445,6 +445,7 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 		break;
 
 		case 1885435763: //swap //so 0 sum 1 swap 2 sub 3 divi 4 prod
+		//printf("Swapping, args - %s\n",arg->argv[0]);
 		operation(arg,*currvarlist,1);
 		break;
 		case 7173491://sum  for the time you can only add real to real and int to int
@@ -640,6 +641,7 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 			case CHAR:*((char *)(pi->value))=sbuf2[0];break;
 			case INT:*((int *)(pi->value))=atoi(sbuf2);break;
 			case REAL:*((float *)(pi->value))=atof(sbuf2);break;
+			default: return;
 		}
 		free(sbuf2);
 		break;
@@ -851,9 +853,10 @@ var *get_var(vars *varlist,char *name) //search for var struct
 	return NULL;
 }
 
-char **split(char *str, char del) //can only split in two, skips delimeter
+char **split(char *sstr, char del) //can only split in two, skips delimeter
 {
 	char **buff = malloc(sizeof(char *)*2);
+	char *str = strdup(sstr);
 	int done = 0, i;
 
 	for(i=0;str[i]!=0 && done < 2;i++)
@@ -994,15 +997,28 @@ var *getvarue(char *value, vars *varlist) //if var (starts with $), returns it, 
 			pi2=getvarue(buffer[1],varlist); //index FREEEEEEE
 			index=*((int *)pi2->value);
 
-			if((arrpi=get_var(varlist,buffer[0]))!=0) 
+			if((arrpi=get_var(varlist,buffer[0]))!=0)
+			{
 			pi=malloc(sizeof(var));
-			pi->value=malloc(sizeof(int));
 			buff=malloc(sizeof(int));
 			*((int*)buff) = *((int *)arrpi->value+index);
 			pi->value=buff;
 			pi->type=INT;
 			pi->name=0;
+
+			if(pi2->name==0)
+			{
+			free(pi2->value);
+			free(pi2);
+			}
+
+			free(*buffer);
+			free(buffer);
 			return pi;
+			}
+			else printf("iarr getvarue error\n");
+			free(*buffer);
+			free(buffer);
 			break;
 		}
 	}
@@ -1030,13 +1046,18 @@ void operation(args *arg, vars *varlist, int op) //void (**op)())
 
 	if(arg->argv[0][0]=='/')
 	{
+		//printf("Operation args1 - %s\n",arg->argv[0]);
 		char **buff=split(arg->argv[0]+1,'/');
+		//printf("buff0 %s buff1 %s\n",buff[0], buff[1]);
 		pi2=getvarue(buff[1],varlist); //index FREEEEEEE
 		int index=*((int *)pi2->value);
+		if(pi2->name==0){free(pi2->value);free(pi2);}
+		//printf("Index - %d\n",index);
 		
         	pi=get_var(varlist,buff[0]);
 		pi->useindex=index;
 		pi->type=IARR;
+		free(*buff);
 		free(buff);
 	}
 	else
@@ -1048,7 +1069,7 @@ void operation(args *arg, vars *varlist, int op) //void (**op)())
         chvar(pi,pi2,op); //op);
 
 	if(pi2->name==0){
-		if(pi2->type==STR)free(*((char **)pi2->value));
+		if(pi2->type==STR) free(*((char **)pi2->value));
 		free(pi2->value);free(pi2);
 	}
 }
