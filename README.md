@@ -15,6 +15,7 @@ It's all in one file. To compile it just run `gcc etude.c -o etude`.
 The program in etude is a series of commands. One command a string.
 + The execution starts from %main routine
 ```
+@a comment. starts with '@'.
 %main
 print "Hello world!" `
 ret
@@ -25,6 +26,8 @@ Only 4 first charecter of a command matter (prin and printf is the same command)
 **Creating variables**
 + There are 4 variable types - **int, real, char, str**
 + To create a variable you write it's type followed by its name and it's value (e.g. `int a 0` `str s text`)
++ there is also an **iarr** type (integer array). To create it you write iarr and number of elements: `iarr 10`
++ you can access array elements like this: `print /arr/0`, `swap /arr/$a /arr2/4`
 + You cannot leave out the value
 + command `list` lists all variables and their values
 
@@ -76,14 +79,14 @@ doif $a < 11 goto loop
 + do define whar args subroutine takes put them after sobroutine definition (e.g. `%mod x y`). They will be converted to vars.
 + to pass args give write them after gosub. To write returen value to a variable write > var after that.
 + to return value put it after ret (you can return vars using $)
-+ You should put them in the end of program. Put **end** after your main program or it will start to execute all the subroutines.
 
 Here's an example
 ```
+%main
 int n 0 
 gosu avarage 250 600 > n 
 print $n `
-end
+ret
 
 %avarage a b 
 sum a $b
