@@ -633,7 +633,15 @@ void exec(command *code, vars **currvarlist, int *finger, label *labels,int *doi
 		pi=get_var(*currvarlist,arg->argv[0]);
 		if(pi==NULL){printf("scan: var not found!\n");break;}
 		sbuf2=malloc(80);
-		c=0;while((sbuf2[c++]=getchar())!='\n');
+		c=0;
+		while((sbuf2[c++]=getchar())!='\n')
+		{
+			if(c==80)
+			{
+				while(getchar()!='\n');
+				break;
+			}
+		}
 		sbuf2[c-1]=0;
 		switch(pi->type)
 		{

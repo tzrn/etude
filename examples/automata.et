@@ -1,8 +1,8 @@
 %main
 
 iarr ruleset 8
-iarr curr 100
-iarr next 100
+iarr curr 220
+iarr next 220
 int n 0
 int val 0
 int num1 0
@@ -12,26 +12,26 @@ int c 0
 
 swap /ruleset/0 0
 swap /ruleset/1 1
-swap /ruleset/2 0
+swap /ruleset/2 1
 swap /ruleset/3 1
 swap /ruleset/4 1
 swap /ruleset/5 0
 swap /ruleset/6 1
-swap /ruleset/7 0
+swap /ruleset/7 1
 
 !clear
-doif $n < 100
+doif $n < 220
 	swap /curr/$n 0
 	sum n 1
 	goto clear
 fin
-swap /curr/50 1
+swap /curr/100 1
 
 swap n 1
 
 !genesis
-@except 99 and 0
-doif $n < 99
+@except last and 0
+doif $n < 219
 	swap c $n
 
 @n-1
@@ -46,26 +46,26 @@ doif $n < 99
 @print $num1 $num2 $num3 `
 
 	gosub value $num1 $num2 $num3 > val
-	sum n 1
 	swap /next/$n /ruleset/$val
+	sum n 1
 	goto genesis
 fin
 
-swap num1 /curr/99
+swap num1 /curr/219
 swap num2 /curr/0
 swap num3 /curr/1
 gosub value $num1 $num2 $num3 > val
 swap /next/0 /ruleset/$val
 
-swap num1 /curr/98
-swap num2 /curr/99
+swap num1 /curr/218
+swap num2 /curr/219
 swap num3 /curr/0
 gosub value $num1 $num2 $num3 > val
-swap /next/99 /ruleset/$val
+swap /next/219 /ruleset/$val
 
 swap n 0
 !display
-doif $n < 100
+doif $n < 220
 	doif /next/$n = 0
 		print " "
 	else
@@ -78,7 +78,7 @@ fin
 
 swap n 0
 !copy
-doif $n < 100
+doif $n < 220
 	swap /curr/$n /next/$n
 	sum n 1
 	goto copy
