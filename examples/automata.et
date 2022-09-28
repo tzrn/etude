@@ -12,12 +12,12 @@ int c 0
 
 swap /ruleset/0 0
 swap /ruleset/1 1
-swap /ruleset/2 1
+swap /ruleset/2 0
 swap /ruleset/3 1
 swap /ruleset/4 1
 swap /ruleset/5 0
 swap /ruleset/6 1
-swap /ruleset/7 1
+swap /ruleset/7 0
 
 !clear
 doif $n < 220
@@ -25,7 +25,7 @@ doif $n < 220
 	sum n 1
 	goto clear
 fin
-swap /curr/100 1
+swap /curr/109 1
 
 swap n 1
 
